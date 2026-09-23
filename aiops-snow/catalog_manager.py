@@ -38,8 +38,8 @@ META_MARKER = "AIOPS_SOP_META="
 TYPE_TEXT = "6"
 TYPE_SELECT_BOX = "5"
 
-_CHOICES_TABLE = None
-_CHOICES_FALLBACKS = ["question_choices", "question_choice", "sc_item_option_choice"]
+_CHOICES_TABLE = "question_choice"
+_CHOICES_FALLBACKS = ["question_choice", "question_choices", "sc_item_option_choice"]
 
 
 def slug(name: str) -> str:

@@ -200,7 +200,7 @@ def get_azure_vm_instance_view(vm_name: str, resource_group: str) -> Dict[str, A
 def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str) -> Dict[str, Any]:
     """
     Execute start, stop/deallocate, or restart operation on Azure VM via ARM REST API,
-    with post-execution status validation.
+    with post-execution status validation and error handling.
     """
     token, sub_id = get_azure_arm_auth()
     if not token:
@@ -210,6 +210,16 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
     base_url = f"https://management.azure.com/subscriptions/{sub_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines/{vm_name}"
 
     pre_view = get_azure_vm_instance_view(vm_name, resource_group)
+    if not pre_view.get("success"):
+        return {
+            "success": False,
+            "vm_name": vm_name,
+            "resource_group": resource_group,
+            "pre_state": "Not Found / Inaccessible",
+            "error": pre_view.get("error", "VM instanceView failed (Resource Not Found)"),
+            "http_code": pre_view.get("http_code", 404),
+        }
+
     pre_status = pre_view.get("display_status", "Unknown")
     pre_code = pre_view.get("power_code", "")
 
@@ -234,10 +244,21 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
     log.info(f"⚡ [Azure VM] Executing POST '{target_action}' for VM '{vm_name}' (Current: {pre_status})...")
     
     start_time = time.time()
+    post_status_code = 0
     try:
         r_post = requests.post(api_url, headers=headers, timeout=30)
         post_status_code = r_post.status_code
         log.info(f"Azure ARM action '{target_action}' HTTP response: {post_status_code}")
+        if post_status_code >= 400:
+            return {
+                "success": False,
+                "vm_name": vm_name,
+                "resource_group": resource_group,
+                "action_executed": target_action,
+                "pre_state": pre_status,
+                "error": f"Azure ARM API returned HTTP {post_status_code}: {r_post.text}",
+                "http_code": post_status_code
+            }
     except Exception as e:
         return {"success": False, "error": f"Failed to send ARM action request: {e}"}
 
@@ -259,7 +280,7 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
 
     duration = round(time.time() - start_time, 2)
     return {
-        "success": True,
+        "success": validated,
         "vm_name": vm_name,
         "resource_group": resource_group,
         "action_executed": target_action,
@@ -275,10 +296,7 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
 def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = None) -> Dict[str, Any]:
     """
     AIOps Autonomous Executor for ServiceNow SOP Runbooks:
-    1. Reads RITM parameters & attached Catalog SOP Markdown.
-    2. Executes target cloud operations (Azure Virtual Machines, Azure App Service, Azure DevOps).
-    3. Formats full execution proof back into ServiceNow Work Notes.
-    4. Sets RITM state to Closed Complete (3).
+    Posts simple, task-by-task execution updates to ServiceNow Work Notes in clean English.
     """
     try:
         ritm_rows = snow_get(
@@ -294,121 +312,89 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
         ritm = ritm_rows[0]
         order_no = unwrap(ritm.get("number")) or order_number or "RITM"
         cat_name = display(ritm.get("cat_item.name")) or display(ritm.get("cat_item")) or "AIOps SOP Catalog"
-        cat_desc = display(ritm.get("cat_item.description")) or ""
-        meta, sop_markdown = extract_catalog_meta(cat_desc)
         variables = read_ritm_vars(ritm_sys_id)
 
         log.info(f"🤖 [AIOps Agent] Executing Runbook for order '{order_no}' ({cat_name})...")
 
+        # Step 1: Set Work In Progress
         snow_update("sc_req_item", ritm_sys_id, {
             "state": STATE_WORK_IN_PROGRESS,
-            "work_notes": f"🤖 AIOps Autonomous Agent dispatched order '{order_no}'. Ingesting SOP runbook and executing automated operations..."
+            "stage": "work_in_progress",
         })
 
-        tool_results = []
         action = (
             variables.get("action")
             or variables.get("vm_action")
             or variables.get("operation")
             or variables.get("power_action")
-            or ""
-        ).lower()
+            or "restart"
+        ).lower().strip()
 
         vm_name = (
             variables.get("vm_name")
             or variables.get("instance_ids")
             or variables.get("target_vm")
             or "vm-agent-runner"
-        )
+        ).strip()
 
         rg_name = (
             variables.get("resource_group")
             or variables.get("rg")
             or "RG-DEVOPS-UAENORTH"
-        )
+        ).strip()
 
-        app_name = variables.get("app_name", "") or variables.get("container_name", "")
-        pipeline_name = variables.get("pipeline_name", "") or variables.get("ado_pipeline", "")
-
-        # 1. Azure VM Execution
-        if "restart" in action or "stop" in action or "start" in action or "deallocate" in action or "vm" in cat_name.lower():
-            log.info(f"Executing Azure VM operation: VM='{vm_name}', RG='{rg_name}', Action='{action}'")
-            vm_res = execute_azure_vm_power_action(vm_name, rg_name, action or "restart")
-            tool_results.append({
-                "operation": "Azure VM Power Management",
-                "vm_name": vm_name,
-                "resource_group": rg_name,
-                "result": vm_res
+        # Step 2: Check VM Current Status (Pre-Flight)
+        pre_view = get_azure_vm_instance_view(vm_name, rg_name)
+        if not pre_view.get("success"):
+            err_msg = pre_view.get("error", "VM not found")
+            snow_update("sc_req_item", ritm_sys_id, {
+                "work_notes": f"🔍 VM Current Status:\nUnable to find Azure VM '{vm_name}' in Resource Group '{rg_name}'.\nDetails: {err_msg}"
             })
-
-        # 2. Azure App Service Execution
-        if "app" in cat_name.lower() or "app_service" in cat_name.lower() or app_name:
-            target_app = app_name or "devops-vsp-sample-app-shakil"
-            log.info(f"Executing Azure App Service check for '{target_app}'...")
-            tool_results.append({
-                "operation": "Azure App Service Check",
-                "app_name": target_app,
-                "status": "Operational"
+            time.sleep(1)
+            snow_update("sc_req_item", ritm_sys_id, {
+                "state": STATE_CLOSED_INCOMPLETE,
+                "stage": "closed_incomplete",
+                "work_notes": f"❌ Action Complete (Failed):\nExecution aborted. The requested VM '{vm_name}' does not exist or cannot be accessed.\n\nTicket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
+                "close_notes": f"AIOps runbook failed: Azure VM '{vm_name}' not found."
             })
+            return {"success": False, "error": err_msg}
 
-        # 3. Azure DevOps Pipeline Check
-        if "pipeline" in cat_name.lower() or "deploy" in action or "build" in action or pipeline_name:
-            target_pipe = pipeline_name or "AI-POC-CI-CD"
-            log.info(f"Checking Azure DevOps CI/CD pipeline '{target_pipe}'...")
-            tool_results.append({
-                "operation": "Azure DevOps CI/CD",
-                "pipeline": target_pipe,
-                "status": "Verified"
+        pre_status = pre_view.get("display_status", "Unknown")
+        snow_update("sc_req_item", ritm_sys_id, {
+            "work_notes": f"🔍 VM Current Status:\nTarget Azure VM '{vm_name}' in '{rg_name}' is currently: {pre_status}."
+        })
+        time.sleep(1)
+
+        # Step 3: Perform Action on VM
+        vm_res = execute_azure_vm_power_action(vm_name, rg_name, action)
+        if not vm_res.get("success") or not vm_res.get("validated"):
+            err = vm_res.get("error") or f"VM power state did not transition as expected (Current status: {vm_res.get('final_state', 'Unknown')})"
+            snow_update("sc_req_item", ritm_sys_id, {
+                "work_notes": f"❌ Action Complete (Failed):\nFailed to complete '{action}' on Azure VM '{vm_name}'.\nDetails: {err}"
             })
+            time.sleep(1)
+            snow_update("sc_req_item", ritm_sys_id, {
+                "state": STATE_CLOSED_INCOMPLETE,
+                "stage": "closed_incomplete",
+                "work_notes": f"⚠️ Ticket Closed:\nOperation failed validation. Ticket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
+                "close_notes": f"Failed executing '{action}' on Azure VM '{vm_name}'."
+            })
+            return {"success": False, "error": err}
 
-        # Generate Execution Report
-        exec_report = None
-        try:
-            from llm_adapter import llm_client
-            prompt = f"""You are an Autonomous AIOps Runbook Automation (RBA) Engineer executing a ServiceNow Service Catalog Order.
-Order Number: {order_no}
-Catalog Item: {cat_name}
-Submitted Variables: {json.dumps(variables, indent=2)}
-SOP Markdown Runbook:
-{sop_markdown}
+        # Step 4: Action Complete (Success)
+        final_state = vm_res.get("final_state", "VM running")
+        dur = vm_res.get("duration_seconds", 10)
+        snow_update("sc_req_item", ritm_sys_id, {
+            "work_notes": f"⚡ Action Complete:\nSuccessfully performed '{action}' on Azure VM '{vm_name}'.\nValidated VM current status: {final_state} (Duration: {dur}s)."
+        })
+        time.sleep(1)
 
-Executed Cloud Telemetry:
-{json.dumps(tool_results, indent=2)}
-
-Format a clear, professional Execution Audit Report to post into ServiceNow Work Notes:
-- Executive Summary & Verdict (🟢 Success)
-- Target Parameters & Configuration Applied
-- Runbook Actions Executed Step-by-Step with Verified State
-- Final Verification & Sign-off
-"""
-            mistral_resp = llm_client.chat_completion([{"role": "user", "content": prompt}], temperature=0.2)
-            exec_report = mistral_resp.get("content", "").strip()
-        except Exception as llm_err:
-            log.warning(f"LLM generation notice: {llm_err}. Using structured telemetry report.")
-
-        if not exec_report:
-            vm_summary = tool_results[0].get("result", {}) if tool_results else {}
-            exec_report = f"""### 🟢 AIOps Autonomous RBA Execution Report
-- **Order Number**: {order_no}
-- **Catalog Item**: {cat_name}
-- **Target Resource**: `{vm_name}` in `{rg_name}`
-- **Requested Action**: `{action or 'restart'}`
-- **Pre-Execution Power State**: `{vm_summary.get('pre_state', 'Unknown')}`
-- **Post-Validation Power State**: `{vm_summary.get('final_state', 'VM running')}` [VALIDATED 🟢]
-- **Execution Duration**: `{vm_summary.get('duration_seconds', 15)}s`
-- **Verdict**: 🟢 Successfully executed in accordance with SOP runbook.
-"""
-
-        work_notes_body = f"""=== 🤖 AIOPS AUTONOMOUS EXECUTION AUDIT ===
-{exec_report}
-
-{DIRECT_DISPATCH_MARKER}
-"""
+        # Step 5: Close the Ticket
         snow_update("sc_req_item", ritm_sys_id, {
             "state": STATE_CLOSED_COMPLETE,
             "stage": "complete",
-            "work_notes": work_notes_body,
-            "close_notes": f"Automated runbook executed successfully by AIOps Agent for order {order_no}."
+            "work_notes": f"🏁 Ticket Closed:\nAll tasks performed and verified successfully. Ticket closed as Closed Complete.\n{DIRECT_DISPATCH_MARKER}",
+            "close_notes": f"Successfully executed '{action}' on Azure VM '{vm_name}'."
         })
 
         log.info(f"✅ [AIOps Agent] Order '{order_no}' executed and Closed Complete successfully.")
@@ -416,8 +402,6 @@ Format a clear, professional Execution Audit Report to post into ServiceNow Work
             "success": True,
             "order_number": order_no,
             "ritm_sys_id": ritm_sys_id,
-            "execution_report": exec_report,
-            "tool_results": tool_results,
             "status": "Closed Complete"
         }
 
@@ -425,7 +409,7 @@ Format a clear, professional Execution Audit Report to post into ServiceNow Work
         log.error(f"❌ Error executing order '{ritm_sys_id}': {e}")
         try:
             snow_update("sc_req_item", ritm_sys_id, {
-                "work_notes": f"❌ AIOps execution encountered an error: {e}"
+                "work_notes": f"❌ AIOps execution encountered an unexpected error: {e}\n{DIRECT_DISPATCH_MARKER}"
             })
         except Exception:
             pass
@@ -489,15 +473,11 @@ class AIOpsDaemon:
             cat_ids = ",".join(cat_map.keys())
             closed = ",".join(CLOSED_STATES)
 
-            fresh_q = f"cat_itemIN{cat_ids}^state={STATE_OPEN}"
-            approved_q = f"cat_itemIN{cat_ids}^approval=approved^stateNOT IN{closed}"
-            rejected_q = f"cat_itemIN{cat_ids}^approval=rejected^stateNOT IN{closed}"
-            wip_approved_q = f"cat_itemIN{cat_ids}^approval=approved^state={STATE_WORK_IN_PROGRESS}"
-            combined_q = f"{fresh_q}^NQ{approved_q}^NQ{rejected_q}^NQ{wip_approved_q}"
-
+            # Look for active tickets
+            active_q = f"cat_itemIN{cat_ids}^stateNOT IN{closed}"
             orders = snow_get(
                 "sc_req_item",
-                combined_q,
+                active_q,
                 ["sys_id", "number", "state", "approval", "cat_item", "sys_created_on"],
                 50,
                 "all"
@@ -512,42 +492,75 @@ class AIOpsDaemon:
                 meta = cat_info.get("_meta", {})
                 approval_req = bool(meta.get("approval_required"))
                 approver_id = meta.get("approver_sys_id")
-                approver_name = meta.get("approver_name")
+                approver_name = meta.get("approver_name") or "SOP Approver"
 
-                approval_state = (unwrap(o.get("approval")) or "").lower()
-
-                if approval_state == "rejected":
-                    log.info(f"[{order_no}] Approval rejected. Closing as incomplete.")
-                    snow_update("sc_req_item", ritm_id, {
-                        "state": STATE_CLOSED_INCOMPLETE,
-                        "work_notes": "AIOps Engine: Approval was rejected. Closing request item."
-                    })
-                    processed_count += 1
+                # Check if this order already completed execution
+                completed_notes = snow_get(
+                    "sys_journal_field",
+                    f"element_id={ritm_id}^valueLIKE{DIRECT_DISPATCH_MARKER}",
+                    ["sys_id"],
+                    1
+                )
+                if completed_notes:
                     continue
 
                 if approval_req:
-                    if approval_state == "approved":
-                        work_notes = snow_get("sys_journal_field", f"element_id={ritm_id}^valueLIKE{DIRECT_DISPATCH_MARKER}", ["sys_id"], 1)
-                        if not work_notes:
-                            log.info(f"[{order_no}] Approved order ready for execution.")
-                            execute_order_with_mistral(ritm_id, order_no)
-                            processed_count += 1
-                    elif approval_state in ("requested", "not requested", ""):
-                        app_notes = snow_get("sys_journal_field", f"element_id={ritm_id}^valueLIKE{APPROVAL_CREATED_MARKER}", ["sys_id"], 1)
-                        if not app_notes and approver_id:
-                            log.info(f"[{order_no}] Creating approval request for '{approver_name or approver_id}'...")
+                    # Look up the actual approval record in sysapproval_approver table
+                    app_filter = f"sysapproval={ritm_id}"
+                    if approver_id:
+                        app_filter += f"^approver={approver_id}"
+                    
+                    approval_records = snow_get(
+                        "sysapproval_approver",
+                        app_filter,
+                        ["sys_id", "state", "approver"],
+                        1
+                    )
+
+                    if not approval_records:
+                        # 1. No approval record created yet -> Create it, set ticket to Awaiting Approval
+                        log.info(f"[{order_no}] Approval required. Creating approval record for '{approver_name}'...")
+                        if approver_id:
                             create_approval_record(approver_id, ritm_id)
+                        snow_update("sc_req_item", ritm_id, {
+                            "approval": "requested",
+                            "state": STATE_OPEN,
+                            "work_notes": f"📋 Ticket Assigned:\nApproval required before execution.\nTicket assigned to approver '{approver_name}'. Ticket status set to 'Awaiting Approval'.\n{APPROVAL_CREATED_MARKER}"
+                        })
+                        processed_count += 1
+                    else:
+                        app_rec = approval_records[0]
+                        app_state = (unwrap(app_rec.get("state")) or "").lower()
+
+                        if app_state == "requested":
+                            # 2. Still awaiting approver action
+                            log.info(f"[{order_no}] Still awaiting approval from '{approver_name}'.")
+                            continue
+                        elif app_state == "rejected":
+                            # 3. Approver rejected
+                            log.info(f"[{order_no}] Approval was rejected by '{approver_name}'. Closing ticket.")
                             snow_update("sc_req_item", ritm_id, {
-                                "approval": "requested",
-                                "work_notes": f"AIOps Engine: Approval requested from {approver_name or approver_id}.\n{APPROVAL_CREATED_MARKER}"
+                                "approval": "rejected",
+                                "state": STATE_CLOSED_INCOMPLETE,
+                                "stage": "closed_incomplete",
+                                "work_notes": f"❌ Approval Rejected:\nRequest was rejected by approver '{approver_name}'. Ticket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
+                                "close_notes": f"Request rejected by approver '{approver_name}'."
                             })
                             processed_count += 1
+                        elif app_state == "approved":
+                            # 4. Approver approved! Proceed to execution
+                            log.info(f"[{order_no}] Approved by '{approver_name}'. Starting execution...")
+                            snow_update("sc_req_item", ritm_id, {
+                                "approval": "approved",
+                                "work_notes": f"✅ Ticket Approved:\nRequest approved by '{approver_name}'. Proceeding with automated execution."
+                            })
+                            execute_order_with_mistral(ritm_id, order_no)
+                            processed_count += 1
                 else:
-                    work_notes = snow_get("sys_journal_field", f"element_id={ritm_id}^valueLIKE{DIRECT_DISPATCH_MARKER}", ["sys_id"], 1)
-                    if not work_notes:
-                        log.info(f"[{order_no}] No approval required. Dispatching to AIOps Agent...")
-                        execute_order_with_mistral(ritm_id, order_no)
-                        processed_count += 1
+                    # No approval required -> Direct execution
+                    log.info(f"[{order_no}] No approval required. Starting direct execution...")
+                    execute_order_with_mistral(ritm_id, order_no)
+                    processed_count += 1
 
             return {"success": True, "processed": processed_count, "found": len(orders)}
         except Exception as e:
