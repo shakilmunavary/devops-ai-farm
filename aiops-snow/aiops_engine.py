@@ -766,7 +766,7 @@ class AIOpsDaemon:
                 meta = cat_info.get("_meta", {})
                 approval_req = bool(meta.get("approval_required"))
                 approver_id = meta.get("approver_sys_id")
-                approver_name = meta.get("approver_name") or "SOP Approver"
+                approver_name = meta.get("approver_name") or "Designated Approver"
 
                 # Check if this order already completed execution
                 completed_notes = snow_get(
