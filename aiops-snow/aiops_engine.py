@@ -142,6 +142,9 @@ def list_orders(cat_item_sys_id: Optional[str] = None, limit: int = 50) -> List[
 
 def get_azure_arm_auth() -> Tuple[Optional[str], Optional[str]]:
     """Obtain Azure ARM Bearer token and Subscription ID from environment."""
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    
     tenant_id = os.environ.get("AZURE_TENANT_ID", "a8e694a8-4dfd-4429-9277-2d0ba68dfeb6")
     client_id = os.environ.get("AZURE_CLIENT_ID", "34446c5a-5fa0-4628-a83e-caa48cdd3a58")
     client_secret = os.environ.get("AZURE_CLIENT_SECRET", "")
