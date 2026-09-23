@@ -2277,6 +2277,80 @@
                 <button class="btn-send" id="agent-send-btn" onclick="sendAgentChatMessage()">Send</button>
             </div>
         </div>
+
+    <!-- Catalog Details Modal Popup -->
+    <div class="modal-backdrop" id="modal-catalog-details">
+        <div class="modal-box" style="width: 880px; max-width: 96vw; height: auto; max-height: 90vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--border-color); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);">
+            <div class="modal-header" style="background: linear-gradient(90deg, #1e293b, #0f172a); padding: 18px 24px; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="brand-logo" style="width: 36px; height: 36px; font-size: 16px; background: linear-gradient(135deg, #3b82f6, #6366f1); border-radius: 10px; display: flex; align-items: center; justify-content: center;">📋</div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3 style="font-size: 17px; font-weight: 800; color: #f8fafc;" id="cat-detail-title">Catalog Item Details</h3>
+                            <span id="cat-detail-badge" class="badge b-done" style="font-size: 11px;">Active Catalog</span>
+                        </div>
+                        <span style="font-size: 12px; color: var(--text-muted);" id="cat-detail-sysid"></span>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeCatalogDetailsModal()">&times;</button>
+            </div>
+
+            <div class="modal-body" style="padding: 22px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; background: var(--bg-base);">
+                <!-- Short Description & Approver Info Cards -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">📝 Description</div>
+                        <div id="cat-detail-desc" style="font-size: 13px; color: #e2e8f0; font-weight: 500;"></div>
+                    </div>
+                    <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">🛡️ Approval Governance</div>
+                        <div id="cat-detail-approval" style="font-size: 13px; color: #e2e8f0; font-weight: 500;"></div>
+                    </div>
+                </div>
+
+                <!-- Variables Used Table -->
+                <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="font-size: 12px; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;">
+                            🧩 Variables Used (<span id="cat-detail-var-count">0</span>)
+                        </div>
+                        <span style="font-size: 11px; color: var(--text-muted);">Dynamic inputs requested upon ordering</span>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;" id="cat-detail-var-table">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: #94a3b8;">
+                                    <th style="padding: 8px 10px;">Variable Name</th>
+                                    <th style="padding: 8px 10px;">Display Label</th>
+                                    <th style="padding: 8px 10px;">Type</th>
+                                    <th style="padding: 8px 10px;">Mandatory</th>
+                                    <th style="padding: 8px 10px;">Options / Choices</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cat-detail-var-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Prompt Details (SOP Markdown) -->
+                <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 12px; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;">
+                            📜 Prompt / SOP Runbook Details
+                        </div>
+                        <button class="btn-chip-action" onclick="copyCatalogPrompt()" style="font-size: 11px; padding: 4px 10px;">📋 Copy Prompt</button>
+                    </div>
+                    <pre id="cat-detail-sop" style="margin: 0; background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; font-family: var(--font-mono); font-size: 12px; color: #93c5fd; white-space: pre-wrap; max-height: 280px; overflow-y: auto; line-height: 1.5;"></pre>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; background: var(--bg-surface); border-top: 1px solid var(--border-color);">
+                <a id="cat-detail-order-btn" href="#" target="_blank" class="btn-add" style="text-decoration: none; display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                    🛒 Order in ServiceNow
+                </a>
+                <button class="btn-outline" onclick="closeCatalogDetailsModal()">Close</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -4777,6 +4851,8 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
             }
         }
 
+        let currentDetailSopMarkdown = "";
+
         async function loadConsoleCatalogs() {
             const el = document.getElementById("catlist");
             if (!el) return;
@@ -4784,15 +4860,18 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
                 const res = await fetch("/api/aiops/catalogs");
                 const data = await res.json();
                 const catalogs = data.catalogs || [];
+                window._aiopsCatalogsMap = {};
                 if (!catalogs.length) {
                     el.innerHTML = '<div class="empty">No AIOps catalogs registered yet. Use "Create catalog" above.</div>';
                     return;
                 }
                 el.innerHTML = "";
                 catalogs.forEach(cat => {
+                    window._aiopsCatalogsMap[cat.sys_id] = cat;
                     const d = document.createElement("div");
                     const isSel = aiopsSelectedCatalog && aiopsSelectedCatalog.sys_id === cat.sys_id;
                     d.className = "cat" + (isSel ? " sel" : "");
+                    d.style.cursor = "pointer";
                     const chips = (cat.fields || []).map(f => `<span>${f.label || f.name}</span>`).join("");
                     const approvalText = cat.approval_required 
                         ? `🔒 Approval required · Approver: ${cat.approver_name || cat.approver_sys_id || 'Designated Lead'}`
@@ -4800,12 +4879,17 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
 
                     d.innerHTML = `
                         <div class="catbody" style="flex: 1;">
-                            <div class="name">${cat.name}</div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                <div class="name" style="color: #60a5fa; font-weight: 700;">${cat.name}</div>
+                                <span style="font-size: 11px; color: var(--text-muted); background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); padding: 2px 6px; border-radius: 4px;">🔍 Click to View Details</span>
+                            </div>
                             <div class="desc">${cat.short_description || "SOP-driven autonomous catalog"}</div>
                             <div class="approval">${approvalText}</div>
                             <div class="chips">${chips}</div>
                         </div>
-                        <button class="btn-ai-danger" type="button" onclick="deleteConsoleCatalog(event, '${cat.sys_id}', '${cat.name}')">Delete</button>
+                        <div style="display: flex; flex-direction: column; gap: 6px; justify-content: center; margin-left: 8px;">
+                            <button class="btn-ai-danger" type="button" onclick="deleteConsoleCatalog(event, '${cat.sys_id}', '${cat.name}')">Delete</button>
+                        </div>
                     `;
                     d.onclick = (e) => {
                         if (e.target.closest("button")) return;
@@ -4813,11 +4897,90 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
                         applyConsoleFilter();
                         loadConsoleCatalogs();
                         loadConsoleOrders();
+                        showCatalogDetailsModal(cat.sys_id);
                     };
                     el.appendChild(d);
                 });
             } catch (e) {
                 el.innerHTML = `<div class="empty">Error loading catalogs: ${e}</div>`;
+            }
+        }
+
+        function showCatalogDetailsModal(sysId) {
+            const cat = window._aiopsCatalogsMap ? window._aiopsCatalogsMap[sysId] : null;
+            if (!cat) return;
+
+            document.getElementById("cat-detail-title").textContent = cat.name || "AIOps Catalog";
+            document.getElementById("cat-detail-sysid").textContent = `ServiceNow SysID: ${cat.sys_id || sysId}`;
+            document.getElementById("cat-detail-desc").textContent = cat.short_description || "SOP-driven autonomous catalog";
+            
+            // Approval
+            const isAppr = Boolean(cat.approval_required);
+            const apprName = cat.approver_name || cat.approver_sys_id || "Designated Approver";
+            document.getElementById("cat-detail-approval").innerHTML = isAppr
+                ? `<span style="color: #fbbf24; font-weight: 700;">🔒 Approval Required</span> · Approver: <strong style="color: #60a5fa;">${apprName}</strong>`
+                : `<span style="color: #34d399; font-weight: 700;">⚡ Direct Auto-Execution</span> (No Approvals Gated)`;
+
+            const badge = document.getElementById("cat-detail-badge");
+            if (isAppr) {
+                badge.className = "badge b-wip";
+                badge.textContent = "🔒 Gated by Approval";
+            } else {
+                badge.className = "badge b-done";
+                badge.textContent = "⚡ Auto-Execution";
+            }
+
+            // Variables
+            const fields = cat.fields || [];
+            document.getElementById("cat-detail-var-count").textContent = fields.length;
+            const tbody = document.getElementById("cat-detail-var-tbody");
+            tbody.innerHTML = "";
+            if (!fields.length) {
+                tbody.innerHTML = `<tr><td colspan="5" style="padding: 12px; text-align: center; color: var(--text-muted);">No input variables defined for this catalog.</td></tr>`;
+            } else {
+                fields.forEach(f => {
+                    const tr = document.createElement("tr");
+                    tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+                    const choicesStr = (f.choices && f.choices.length) ? f.choices.join(", ") : (f.default_value ? `Default: ${f.default_value}` : "—");
+                    tr.innerHTML = `
+                        <td style="padding: 8px 10px; font-family: var(--font-mono); color: #38bdf8; font-weight: 600;">${f.name || "—"}</td>
+                        <td style="padding: 8px 10px; color: #f1f5f9;">${f.label || f.name || "—"}</td>
+                        <td style="padding: 8px 10px; color: #a78bfa;"><span style="background: rgba(167, 139, 250, 0.1); padding: 2px 6px; border-radius: 4px;">${f.type || "string"}</span></td>
+                        <td style="padding: 8px 10px;">${f.mandatory ? '<span style="color: #ef4444; font-weight: 700;">Required</span>' : '<span style="color: #94a3b8;">Optional</span>'}</td>
+                        <td style="padding: 8px 10px; color: #cbd5e1; font-family: var(--font-mono); font-size: 11px;">${choicesStr}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // SOP / Prompt
+            currentDetailSopMarkdown = cat.sop_markdown || cat.sop || "No specific SOP prompt defined.";
+            document.getElementById("cat-detail-sop").textContent = currentDetailSopMarkdown;
+
+            // Order button
+            const orderBtn = document.getElementById("cat-detail-order-btn");
+            if (cat.order_url) {
+                orderBtn.href = cat.order_url;
+                orderBtn.style.display = "flex";
+            } else {
+                orderBtn.href = `https://dev392242.service-now.com/nav_to.do?uri=com.glideapp.servicecatalog_cat_item_view.do?v=1&sysparm_id=${cat.sys_id}`;
+                orderBtn.style.display = "flex";
+            }
+
+            document.getElementById("modal-catalog-details").style.display = "flex";
+        }
+
+        function closeCatalogDetailsModal() {
+            document.getElementById("modal-catalog-details").style.display = "none";
+        }
+
+        function copyCatalogPrompt() {
+            if (currentDetailSopMarkdown) {
+                navigator.clipboard.writeText(currentDetailSopMarkdown).then(() => {
+                    showToast("📋 SOP Prompt copied to clipboard!");
+                }).catch(err => {
+                    showToast("Failed to copy prompt: " + err, "error");
+                });
             }
         }
 

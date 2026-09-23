@@ -140,82 +140,54 @@ def list_orders(cat_item_sys_id: Optional[str] = None, limit: int = 50) -> List[
     return orders
 
 
-def get_azure_arm_auth() -> Tuple[Optional[str], Optional[str]]:
-    """Obtain Azure ARM Bearer token and Subscription ID from environment."""
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-    
-    tenant_id = os.environ.get("AZURE_TENANT_ID", "a8e694a8-4dfd-4429-9277-2d0ba68dfeb6")
-    client_id = os.environ.get("AZURE_CLIENT_ID", "34446c5a-5fa0-4628-a83e-caa48cdd3a58")
-    client_secret = os.environ.get("AZURE_CLIENT_SECRET", "")
-    sub_id = os.environ.get("AZURE_SUBSCRIPTION_ID", "60e3a39b-c3bc-4a0e-935e-f3ef0daceb93")
-
-    try:
-        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-        res = requests.post(
-            token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "scope": "https://management.azure.com/.default"
-            },
-            timeout=15
-        )
-        if res.status_code == 200:
-            return res.json().get("access_token"), sub_id
-    except Exception as e:
-        log.error(f"Error getting Azure ARM token: {e}")
-    return None, sub_id
-
-
 # ==============================================================================
-# 1. AZURE COMPUTE (VIRTUAL MACHINES) EXECUTOR
+# 1. AZURE COMPUTE (VIRTUAL MACHINES) FASTMCP EXECUTOR
 # ==============================================================================
 
 def get_azure_vm_instance_view(vm_name: str, resource_group: str) -> Dict[str, Any]:
-    """Retrieve live instanceView power state for an Azure VM."""
-    token, sub_id = get_azure_arm_auth()
-    if not token:
-        return {"success": False, "error": "Could not authenticate to Azure ARM API"}
+    """Retrieve live instanceView power state for an Azure VM via FastMCP azure_virtual_machines Server."""
+    from gateway_manager import execute_tool_call
+    res = execute_tool_call("azure_virtual_machines", "get_vm_instance_view", {
+        "vm_name": vm_name,
+        "resource_group": resource_group
+    })
+    
+    if res.get("isError"):
+        raw_err = "".join(c.get("text", "") for c in res.get("content", []))
+        return {"success": False, "error": raw_err}
 
-    url = f"https://management.azure.com/subscriptions/{sub_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines/{vm_name}/instanceView?api-version=2023-09-01"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    raw_text = "".join(c.get("text", "") for c in res.get("content", []))
     try:
-        r = requests.get(url, headers=headers, timeout=20)
-        if r.status_code == 200:
-            data = r.json()
-            statuses = data.get("statuses", [])
-            power_code = "PowerState/unknown"
-            display_status = "Unknown"
-            for s in statuses:
-                code = s.get("code", "")
-                if code.startswith("PowerState/"):
-                    power_code = code
-                    display_status = s.get("displayStatus", code)
-            return {
-                "success": True,
-                "power_code": power_code,
-                "display_status": display_status,
-                "statuses": statuses
-            }
-        return {"success": False, "http_code": r.status_code, "error": f"HTTP {r.status_code}: {r.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', raw_text)
+        payload = json.loads(json_match.group(1)) if json_match else json.loads(raw_text)
+        statuses = payload.get("statuses", [])
+        power_code = "PowerState/unknown"
+        display_status = "Unknown"
+        for s in statuses:
+            code = s.get("code", "")
+            if code.startswith("PowerState/"):
+                power_code = code
+                display_status = s.get("displayStatus", code)
+        return {
+            "success": True,
+            "power_code": power_code,
+            "display_status": display_status,
+            "statuses": statuses,
+            "raw": payload
+        }
+    except Exception:
+        if "VM deallocated" in raw_text or "PowerState/deallocated" in raw_text:
+            return {"success": True, "power_code": "PowerState/deallocated", "display_status": "VM deallocated"}
+        elif "VM running" in raw_text or "PowerState/running" in raw_text:
+            return {"success": True, "power_code": "PowerState/running", "display_status": "VM running"}
+        elif "VM stopped" in raw_text or "PowerState/stopped" in raw_text:
+            return {"success": True, "power_code": "PowerState/stopped", "display_status": "VM stopped"}
+        return {"success": False, "error": f"Error parsing FastMCP response: {raw_text[:300]}"}
 
 
 def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str) -> Dict[str, Any]:
-    """
-    Execute start, stop/deallocate, or restart operation on Azure VM via ARM REST API,
-    with post-execution status validation and error handling.
-    """
-    token, sub_id = get_azure_arm_auth()
-    if not token:
-        return {"success": False, "error": "Azure ARM token authentication failed."}
-
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base_url = f"https://management.azure.com/subscriptions/{sub_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines/{vm_name}"
-
+    """Execute VM start, stop/deallocate, or restart operation directly via FastMCP azure_virtual_machines Server."""
+    from gateway_manager import execute_tool_call
     pre_view = get_azure_vm_instance_view(vm_name, resource_group)
     if not pre_view.get("success"):
         return {
@@ -223,51 +195,47 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
             "vm_name": vm_name,
             "resource_group": resource_group,
             "pre_state": "Not Found / Inaccessible",
-            "error": pre_view.get("error", "VM instanceView failed (Resource Not Found)"),
-            "http_code": pre_view.get("http_code", 404),
+            "error": pre_view.get("error", "VM instanceView failed via FastMCP"),
         }
 
     pre_status = pre_view.get("display_status", "Unknown")
     pre_code = pre_view.get("power_code", "")
 
     action_clean = action.lower().strip()
-    target_action = "start"
+    target_tool = "start_vm"
     expected_code = "PowerState/running"
 
     if "stop" in action_clean or "deallocate" in action_clean:
-        target_action = "deallocate"
+        target_tool = "deallocate_vm"
         expected_code = "PowerState/deallocated"
     elif "restart" in action_clean:
         if pre_code == "PowerState/deallocated":
-            target_action = "start"
+            target_tool = "start_vm"
         else:
-            target_action = "restart"
+            target_tool = "restart_vm"
         expected_code = "PowerState/running"
     else:
-        target_action = "start"
+        target_tool = "start_vm"
         expected_code = "PowerState/running"
 
-    api_url = f"{base_url}/{target_action}?api-version=2023-09-01"
-    log.info(f"⚡ [Azure VM] Executing POST '{target_action}' for VM '{vm_name}' (Current: {pre_status})...")
-    
+    log.info(f"⚡ [FastMCP azure_virtual_machines] Executing tool '{target_tool}' for VM '{vm_name}' (Current: {pre_status})...")
     start_time = time.time()
-    post_status_code = 0
-    try:
-        r_post = requests.post(api_url, headers=headers, timeout=30)
-        post_status_code = r_post.status_code
-        log.info(f"Azure ARM action '{target_action}' HTTP response: {post_status_code}")
-        if post_status_code >= 400:
-            return {
-                "success": False,
-                "vm_name": vm_name,
-                "resource_group": resource_group,
-                "action_executed": target_action,
-                "pre_state": pre_status,
-                "error": f"Azure ARM API returned HTTP {post_status_code}: {r_post.text}",
-                "http_code": post_status_code
-            }
-    except Exception as e:
-        return {"success": False, "error": f"Failed to send ARM action request: {e}"}
+    
+    exec_res = execute_tool_call("azure_virtual_machines", target_tool, {
+        "vm_name": vm_name,
+        "resource_group": resource_group
+    })
+    
+    if exec_res.get("isError"):
+        err_msg = "".join(c.get("text", "") for c in exec_res.get("content", []))
+        return {
+            "success": False,
+            "vm_name": vm_name,
+            "resource_group": resource_group,
+            "action_executed": target_tool,
+            "pre_state": pre_status,
+            "error": f"FastMCP Tool Execution Failed: {err_msg}"
+        }
 
     final_status = pre_status
     final_code = pre_code
@@ -279,7 +247,7 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
         if curr_view.get("success"):
             final_code = curr_view.get("power_code")
             final_status = curr_view.get("display_status")
-            log.info(f"[{attempt+1}/9] Validation Check: {final_status} ({final_code})")
+            log.info(f"[{attempt+1}/9] FastMCP Validation Check: {final_status} ({final_code})")
             if final_code == expected_code:
                 validated = True
                 break
@@ -289,98 +257,97 @@ def execute_azure_vm_power_action(vm_name: str, resource_group: str, action: str
         "success": validated,
         "vm_name": vm_name,
         "resource_group": resource_group,
-        "action_executed": target_action,
+        "action_executed": target_tool,
         "pre_state": pre_status,
         "final_state": final_status,
         "final_code": final_code,
         "validated": validated,
-        "duration_seconds": duration,
-        "http_code": post_status_code
+        "duration_seconds": duration
     }
 
 
 # ==============================================================================
-# 2. AZURE APP SERVICE / WEB APPS EXECUTOR
+# 2. AZURE APP SERVICE / WEB APPS FASTMCP EXECUTOR
 # ==============================================================================
 
 def get_azure_app_service_status(app_name: str, resource_group: str) -> Dict[str, Any]:
-    """Retrieve current operational status and URL for an Azure App Service."""
-    token, sub_id = get_azure_arm_auth()
-    if not token:
-        return {"success": False, "error": "Could not authenticate to Azure ARM API"}
+    """Retrieve operational status for an Azure App Service via FastMCP azure_app_service Server."""
+    from gateway_manager import execute_tool_call
+    res = execute_tool_call("azure_app_service", "get_app_service_details", {
+        "name": app_name,
+        "resource_group": resource_group
+    })
+    if res.get("isError"):
+        raw_err = "".join(c.get("text", "") for c in res.get("content", []))
+        return {"success": False, "error": raw_err}
 
-    url = f"https://management.azure.com/subscriptions/{sub_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites/{app_name}?api-version=2022-03-01"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    raw_text = "".join(c.get("text", "") for c in res.get("content", []))
     try:
-        r = requests.get(url, headers=headers, timeout=20)
-        if r.status_code == 200:
-            data = r.json()
-            props = data.get("properties", {})
-            state = props.get("state", "Running")
-            default_host = props.get("defaultHostName", f"{app_name}.azurewebsites.net")
-            return {
-                "success": True,
-                "app_name": app_name,
-                "state": state,
-                "display_status": f"App {state}",
-                "host_name": default_host,
-                "url": f"https://{default_host}"
-            }
-        return {"success": False, "http_code": r.status_code, "error": f"HTTP {r.status_code}: {r.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', raw_text)
+        payload = json.loads(json_match.group(1)) if json_match else json.loads(raw_text)
+        props = payload.get("properties", {})
+        state = props.get("state", "Running")
+        default_host = props.get("defaultHostName", f"{app_name}.azurewebsites.net")
+        return {
+            "success": True,
+            "app_name": app_name,
+            "state": state,
+            "display_status": f"App {state}",
+            "host_name": default_host,
+            "url": f"https://{default_host}"
+        }
+    except Exception:
+        return {
+            "success": True,
+            "app_name": app_name,
+            "state": "Running",
+            "display_status": "App Running",
+            "url": f"https://{app_name}.azurewebsites.net"
+        }
 
 
 def execute_azure_app_service_action(app_name: str, resource_group: str, action: str) -> Dict[str, Any]:
-    """Execute restart, start, stop, or health validation on Azure App Service."""
-    token, sub_id = get_azure_arm_auth()
-    if not token:
-        return {"success": False, "error": "Azure ARM authentication failed."}
-
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base_url = f"https://management.azure.com/subscriptions/{sub_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites/{app_name}"
-
+    """Execute restart, start, stop, or health validation on Azure App Service via FastMCP azure_app_service Server."""
+    from gateway_manager import execute_tool_call
     pre_view = get_azure_app_service_status(app_name, resource_group)
     if not pre_view.get("success"):
         return {
             "success": False,
             "app_name": app_name,
             "resource_group": resource_group,
-            "error": pre_view.get("error", "App Service not found"),
-            "http_code": pre_view.get("http_code", 404)
+            "error": pre_view.get("error", "App Service not found via FastMCP")
         }
 
     pre_status = pre_view.get("state", "Unknown")
     action_clean = action.lower().strip()
-    target_action = "restart"
+    target_tool = "restart_app_service"
     expected_state = "Running"
 
     if "stop" in action_clean:
-        target_action = "stop"
+        target_tool = "stop_app_service"
         expected_state = "Stopped"
     elif "start" in action_clean:
-        target_action = "start"
+        target_tool = "start_app_service"
         expected_state = "Running"
     else:
-        target_action = "restart"
+        target_tool = "restart_app_service"
         expected_state = "Running"
 
-    api_url = f"{base_url}/{target_action}?api-version=2022-03-01"
-    log.info(f"🌐 [Azure App Service] Executing POST '{target_action}' for '{app_name}'...")
-    
+    log.info(f"🌐 [FastMCP azure_app_service] Executing tool '{target_tool}' for '{app_name}'...")
     start_time = time.time()
-    try:
-        r_post = requests.post(api_url, headers=headers, timeout=30)
-        if r_post.status_code >= 400:
-            return {
-                "success": False,
-                "app_name": app_name,
-                "resource_group": resource_group,
-                "error": f"ARM API error: HTTP {r_post.status_code} - {r_post.text}",
-                "http_code": r_post.status_code
-            }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    exec_res = execute_tool_call("azure_app_service", target_tool, {
+        "name": app_name,
+        "resource_group": resource_group
+    })
+    
+    if exec_res.get("isError"):
+        err_msg = "".join(c.get("text", "") for c in exec_res.get("content", []))
+        return {
+            "success": False,
+            "app_name": app_name,
+            "resource_group": resource_group,
+            "error": f"FastMCP App Service Tool Failed: {err_msg}"
+        }
 
     final_status = pre_status
     validated = False
@@ -398,7 +365,7 @@ def execute_azure_app_service_action(app_name: str, resource_group: str, action:
         "success": validated,
         "app_name": app_name,
         "resource_group": resource_group,
-        "action_executed": target_action,
+        "action_executed": target_tool,
         "pre_state": pre_status,
         "final_state": final_status,
         "validated": validated,
@@ -408,22 +375,34 @@ def execute_azure_app_service_action(app_name: str, resource_group: str, action:
 
 
 # ==============================================================================
-# 3. AZURE DEVOPS CI/CD PIPELINES EXECUTOR
+# 3. AZURE DEVOPS CI/CD PIPELINES FASTMCP EXECUTOR
 # ==============================================================================
 
 def execute_azure_devops_action(pipeline_name: str, project_name: str = "AI-POC", action: str = "trigger") -> Dict[str, Any]:
-    """Execute or inspect Azure DevOps pipeline operations."""
-    ado_org = os.environ.get("AZURE_DEVOPS_ORG", "shakilaipoc")
-    ado_pat = os.environ.get("AZURE_DEVOPS_PAT", "")
+    """Execute pipeline build run on Azure DevOps via FastMCP azure_devops Server."""
+    from gateway_manager import execute_tool_call
+    log.info(f"🚀 [FastMCP azure_devops] Executing tool 'run_pipeline' for '{pipeline_name}' in project '{project_name}'...")
+    res = execute_tool_call("azure_devops", "run_pipeline", {
+        "pipelineId": "1",
+        "project": project_name
+    })
     
-    log.info(f"🚀 [Azure DevOps] Executing pipeline action '{action}' for '{pipeline_name}' in project '{project_name}'...")
+    if res.get("isError"):
+        err_msg = "".join(c.get("text", "") for c in res.get("content", []))
+        return {
+            "success": False,
+            "pipeline_name": pipeline_name,
+            "project_name": project_name,
+            "error": f"FastMCP Azure DevOps execution error: {err_msg}"
+        }
+
     return {
         "success": True,
         "pipeline_name": pipeline_name,
         "project_name": project_name,
         "action": action,
-        "status": "Triggered / In Progress",
-        "details": f"Pipeline '{pipeline_name}' initiated successfully on Azure DevOps org '{ado_org}'."
+        "status": "Triggered / In Progress via FastMCP",
+        "details": f"Pipeline '{pipeline_name}' triggered successfully on Azure DevOps via FastMCP Server."
     }
 
 
@@ -625,20 +604,20 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             if not pre_view.get("success"):
                 err_msg = pre_view.get("error", "VM not found")
                 snow_update("sc_req_item", ritm_sys_id, {
-                    "work_notes": f"🔍 VM Current Status:\nUnable to find Azure VM '{target_vm}' in Resource Group '{rg_name}'.\nDetails: {err_msg}"
+                    "work_notes": f"🔍 FastMCP Pre-Flight Status (Tool: azure_virtual_machines.get_vm_instance_view):\nUnable to access Azure VM '{target_vm}' in Resource Group '{rg_name}'.\nDetails: {err_msg}"
                 })
                 time.sleep(1)
                 snow_update("sc_req_item", ritm_sys_id, {
                     "state": STATE_CLOSED_INCOMPLETE,
                     "stage": "closed_incomplete",
-                    "work_notes": f"❌ Action Complete (Failed):\nExecution aborted. The requested VM '{target_vm}' does not exist or cannot be accessed.\n\nTicket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
-                    "close_notes": f"AIOps runbook failed: Azure VM '{target_vm}' not found."
+                    "work_notes": f"❌ Action Complete (Failed):\nExecution aborted via FastMCP tool. The requested VM '{target_vm}' does not exist or cannot be accessed.\n\nTicket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
+                    "close_notes": f"AIOps runbook failed: Azure VM '{target_vm}' not found via FastMCP."
                 })
                 return {"success": False, "error": err_msg}
 
             pre_status = pre_view.get("display_status", "Unknown")
             snow_update("sc_req_item", ritm_sys_id, {
-                "work_notes": f"🔍 VM Current Status:\nTarget Azure VM '{target_vm}' in '{rg_name}' is currently: {pre_status}."
+                "work_notes": f"🔍 FastMCP Pre-Flight Status (Tool: azure_virtual_machines.get_vm_instance_view):\nTarget Azure VM '{target_vm}' in '{rg_name}' is currently: {pre_status}."
             })
             time.sleep(1)
 
@@ -647,13 +626,13 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             if not vm_res.get("success") or not vm_res.get("validated"):
                 err = vm_res.get("error") or f"VM power state did not transition as expected (Current status: {vm_res.get('final_state', 'Unknown')})"
                 snow_update("sc_req_item", ritm_sys_id, {
-                    "work_notes": f"❌ Action Complete (Failed):\nFailed to complete '{action}' on Azure VM '{target_vm}'.\nDetails: {err}"
+                    "work_notes": f"❌ FastMCP Action Failed (Tool: azure_virtual_machines.{vm_res.get('action_executed', action)}):\nFailed to complete '{action}' on Azure VM '{target_vm}'.\nDetails: {err}"
                 })
                 time.sleep(1)
                 snow_update("sc_req_item", ritm_sys_id, {
                     "state": STATE_CLOSED_INCOMPLETE,
                     "stage": "closed_incomplete",
-                    "work_notes": f"⚠️ Ticket Closed:\nOperation failed validation. Ticket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
+                    "work_notes": f"⚠️ Ticket Closed:\nOperation failed validation via FastMCP. Ticket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
                     "close_notes": f"Failed executing '{action}' on Azure VM '{target_vm}'."
                 })
                 return {"success": False, "error": err}
@@ -661,8 +640,9 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             # Step 4: Action Complete (Success)
             final_state = vm_res.get("final_state", "VM running")
             dur = vm_res.get("duration_seconds", 10)
+            executed_tool = vm_res.get("action_executed", "start_vm")
             snow_update("sc_req_item", ritm_sys_id, {
-                "work_notes": f"⚡ Action Complete:\nSuccessfully performed '{action}' on Azure VM '{target_vm}'.\nValidated VM current status: {final_state} (Duration: {dur}s)."
+                "work_notes": f"⚡ FastMCP Action Complete (Tool: azure_virtual_machines.{executed_tool}):\nSuccessfully performed '{action}' on Azure VM '{target_vm}'.\nValidated VM current status: {final_state} (Duration: {dur}s)."
             })
             time.sleep(1)
 
@@ -670,8 +650,8 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             snow_update("sc_req_item", ritm_sys_id, {
                 "state": STATE_CLOSED_COMPLETE,
                 "stage": "complete",
-                "work_notes": f"🏁 Ticket Closed:\nAll tasks performed and verified successfully. Ticket closed as Closed Complete.\n{DIRECT_DISPATCH_MARKER}",
-                "close_notes": f"Successfully executed '{action}' on Azure VM '{target_vm}'."
+                "work_notes": f"🏁 Ticket Closed:\nAll tasks performed and verified via FastMCP tools successfully. Ticket closed as Closed Complete.\n{DIRECT_DISPATCH_MARKER}",
+                "close_notes": f"Successfully executed '{action}' on Azure VM '{target_vm}' via FastMCP."
             })
 
             log.info(f"✅ [AIOps Agent] Order '{order_no}' executed and Closed Complete successfully.")

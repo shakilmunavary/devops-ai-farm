@@ -156,37 +156,81 @@ SERVICE_NAME = "mcp_{server_id}"
 _AZURE_TOKEN_CACHE = {{"token": "", "expires_at": 0}}
 
 def get_credentials() -> Dict[str, str]:
-    """Strictly loads credentials from this server\'s private .env file without reading global os.environ."""
+    """Loads credentials with multi-tier fallback: Server .env -> Persistent Storage -> Root .env -> config.json -> os.environ."""
     creds = {{
         "base_url": "{base_url}",
         "auth_val": "{auth_header}",
         "username": ""
     }}
     
-    # 1. Look for .env in current server folder
     srv_dir = os.path.dirname(os.path.abspath(__file__))
-    env_file = os.path.join(srv_dir, ".env")
     raw_env = {{}}
     
+    # 1. Look for .env in current server folder
+    env_file = os.path.join(srv_dir, ".env")
     if os.path.exists(env_file):
         try:
-            raw_env = dotenv_values(env_file)
+            raw_env.update(dotenv_values(env_file))
         except Exception:
             pass
             
-    # 2. Check persistent storage location if not found
-    if not raw_env:
-        alt_paths = [
-            os.path.join("/home/data/mcp_storage", "mcp_servers", "{server_id}", ".env"),
-            os.path.join(srv_dir, "..", "persistent_data", "mcp_servers", "{server_id}", ".env")
-        ]
-        for p in alt_paths:
-            if os.path.exists(p):
-                try:
-                    raw_env = dotenv_values(p)
-                    break
-                except Exception:
-                    pass
+    # 2. Check persistent storage location
+    alt_paths = [
+        os.path.join("/home/data/mcp_storage", "mcp_servers", "{server_id}", ".env"),
+        os.path.join(srv_dir, "..", "persistent_data", "mcp_servers", "{server_id}", ".env"),
+        os.path.join(srv_dir, "..", "..", "persistent_data", "mcp_servers", "{server_id}", ".env")
+    ]
+    for p in alt_paths:
+        if os.path.exists(p):
+            try:
+                for k, v in dotenv_values(p).items():
+                    if k not in raw_env and v:
+                        raw_env[k] = v
+            except Exception:
+                pass
+
+    # 3. Check root .env
+    root_env_candidates = [
+        os.path.join(srv_dir, "..", ".env"),
+        os.path.join(srv_dir, "..", "..", ".env"),
+        os.path.join(srv_dir, "..", "..", "..", ".env"),
+        os.path.join(os.getcwd(), ".env")
+    ]
+    for rp in root_env_candidates:
+        if os.path.exists(rp):
+            try:
+                for k, v in dotenv_values(rp).items():
+                    if k not in raw_env and v:
+                        raw_env[k] = v
+            except Exception:
+                pass
+
+    # 4. Check persistent config.json for stored server config
+    config_json_candidates = [
+        os.path.join("/home/data/mcp_storage", "config.json"),
+        os.path.join(srv_dir, "..", "config.json"),
+        os.path.join(srv_dir, "..", "persistent_data", "config.json"),
+        os.path.join(srv_dir, "..", "..", "persistent_data", "config.json"),
+        os.path.join(os.getcwd(), "persistent_data", "config.json"),
+    ]
+    for cjp in config_json_candidates:
+        if os.path.exists(cjp):
+            try:
+                with open(cjp, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+                    srv_cfg = cfg_data.get("servers", {{}}).get("{server_id}", {{}}).get("config", {{}})
+                    if srv_cfg:
+                        for k, v in srv_cfg.items():
+                            if k not in raw_env and v:
+                                raw_env[k] = str(v)
+                break
+            except Exception:
+                pass
+
+    # 5. Check os.environ for cloud / container runtime variables
+    for k, v in os.environ.items():
+        if k not in raw_env and v:
+            raw_env[k] = str(v)
 
     for k, v in (raw_env or {{}}).items():
         if not v:
@@ -388,64 +432,58 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
                 args.pop("id", None)
                 args["sysparm_query"] = f"number={{inc_val}}"
 
+    # Domain specific parameter extractions
+    vm_val = args.get("vm_name") or args.get("virtual_machine_name") or args.get("vmName") or args.get("target_vm") or args.get("name") or ""
+    app_val = args.get("app_name") or args.get("appName") or args.get("site_name") or args.get("siteName") or args.get("webapp_name") or args.get("web_app") or args.get("name") or ""
+    item_id_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id") or args.get("item_id") or args.get("record_id") or ""
+    sub_val = args.get("subscription_id") or args.get("subscriptionId") or args.get("subscription") or args.get("sub_id") or creds.get("subscription_id") or creds.get("azure_subscription_id") or os.environ.get("AZURE_SUBSCRIPTION_ID", "")
+    rg_val = args.get("resource_group") or args.get("resourceGroupName") or args.get("resource_group_name") or args.get("rg") or creds.get("resource_group") or creds.get("azure_resource_group") or os.environ.get("AZURE_RESOURCE_GROUP", "")
+    org_val = args.get("org") or args.get("organization") or args.get("organization_name") or creds.get("org") or creds.get("organization") or os.environ.get("AZURE_DEVOPS_ORG", "")
+    proj_val = args.get("project") or args.get("project_name") or args.get("projectId") or args.get("project_id") or creds.get("project") or creds.get("project_name") or os.environ.get("AZURE_DEVOPS_PROJECT", "")
+
     # Substitute parameters passed in tool call (handles snake_case, camelCase, and clean aliases)
     for k, v in list(args.items()):
         if v is not None and str(v).strip() != "":
             k_str = str(k)
             k_no_us = k_str.replace("_", "")
-            target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_str) + r'|' + re.escape(k_no_us) + r')\\}}', str(v), target_endpoint, flags=re.IGNORECASE)
+            target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_str) + r'|' + re.escape(k_no_us) + r')\\}}', lambda m, val=str(v): val, target_endpoint, flags=re.IGNORECASE)
 
     # Domain specific alias replacements
-    vm_val = args.get("vm_name") or args.get("virtual_machine_name") or args.get("name")
     if vm_val:
-        target_endpoint = re.sub(r'\\{{(?:vm_?name|virtual_?machine(?:_?name)?|name)\\}}', str(vm_val), target_endpoint, flags=re.IGNORECASE)
-
-    app_val = args.get("app_name") or args.get("name") or args.get("site_name") or args.get("webapp_name")
+        target_endpoint = re.sub(r'\\{{(?:vm_?name|virtual_?machine(?:_?name)?|vmName|name)\\}}', lambda m: str(vm_val), target_endpoint, flags=re.IGNORECASE)
     if app_val:
-        target_endpoint = re.sub(r'\\{{(?:app_?name|name|site_?name|webapp_?name)\\}}', str(app_val), target_endpoint, flags=re.IGNORECASE)
-
-    item_id_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id") or args.get("item_id") or args.get("record_id")
+        target_endpoint = re.sub(r'\\{{(?:app_?name|site_?name|webapp_?name|appName|siteName|name)\\}}', lambda m: str(app_val), target_endpoint, flags=re.IGNORECASE)
     if item_id_val:
-        target_endpoint = re.sub(r'\\{{(?:incident_?id|sys_?id|record_?id|item_?id|number|id)\\}}', str(item_id_val), target_endpoint, flags=re.IGNORECASE)
-
-    # Auto-substitute configured scope values (org, owner, subscription, resource_group, project, etc.)
-    sub_val = creds.get("subscription_id") or creds.get("azure_subscription_id") or ""
-    rg_val = creds.get("resource_group") or creds.get("azure_resource_group") or ""
-    org_val = creds.get("org") or creds.get("organization") or creds.get("organization_name") or ""
-    proj_val = creds.get("project") or creds.get("project_name") or ""
-
+        target_endpoint = re.sub(r'\\{{(?:incident_?id|sys_?id|record_?id|item_?id|number|id)\\}}', lambda m: str(item_id_val), target_endpoint, flags=re.IGNORECASE)
     if sub_val:
-        target_endpoint = re.sub(r'\\{{(?:subscription_?id|sub_?id|subscription)\\}}', str(sub_val), target_endpoint, flags=re.IGNORECASE)
+        target_endpoint = re.sub(r'\\{{(?:subscription_?id|subscriptionId|sub_?id|subscription)\\}}', lambda m: str(sub_val), target_endpoint, flags=re.IGNORECASE)
     if rg_val:
-        target_endpoint = re.sub(r'\\{{(?:resource_?group(?:_?name)?|rg(?:_?name)?)\\}}', str(rg_val), target_endpoint, flags=re.IGNORECASE)
+        target_endpoint = re.sub(r'\\{{(?:resource_?group(?:_?name)?|resourceGroupName|rg(?:_?name)?)\\}}', lambda m: str(rg_val), target_endpoint, flags=re.IGNORECASE)
     if org_val:
-        target_endpoint = re.sub(r'\\{{(?:org(?:anization)?(?:_?name)?|owner)\\}}', str(org_val), target_endpoint, flags=re.IGNORECASE)
+        target_endpoint = re.sub(r'\\{{(?:org(?:anization)?(?:_?name)?|owner)\\}}', lambda m: str(org_val), target_endpoint, flags=re.IGNORECASE)
     if proj_val:
-        target_endpoint = re.sub(r'\\{{(?:project(?:_?(?:name|id|key))?)\\}}', str(proj_val), target_endpoint, flags=re.IGNORECASE)
+        target_endpoint = re.sub(r'\\{{(?:project(?:_?(?:name|id|key))?|projectId)\\}}', lambda m: str(proj_val), target_endpoint, flags=re.IGNORECASE)
 
     for k, v in list(creds.items()):
         if not v or k in ["base_url", "auth_val"]:
             continue
         k_clean = str(k).lower()
         k_no_us = k_clean.replace("_", "")
-        target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_clean) + r'|' + re.escape(k_no_us) + r')\\}}', str(v), target_endpoint, flags=re.IGNORECASE)
+        target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_clean) + r'|' + re.escape(k_no_us) + r')\\}}', lambda m, val=str(v): val, target_endpoint, flags=re.IGNORECASE)
 
     # Azure ARM: Auto-format ARM endpoint and API version (only for Azure ARM, not Azure DevOps)
     is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
     is_arm = not is_ado and any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"])
 
     if is_arm:
-        sub_id = creds.get("subscription_id") or creds.get("azure_subscription_id") or ""
-        rg = creds.get("resource_group") or creds.get("azure_resource_group") or ""
-        
         if "/subscriptions/" not in target_endpoint:
             if any(w in srv_lower for w in ["app_service", "appservice", "web"]):
-                target_endpoint = f"/subscriptions/{{sub_id}}/resourceGroups/{{rg}}/providers/Microsoft.Web/sites"
+                target_endpoint = f"/subscriptions/{{sub_val}}/resourceGroups/{{rg_val}}/providers/Microsoft.Web/sites"
             elif any(w in srv_lower for w in ["vm", "compute", "iaas"]):
-                if rg:
-                    target_endpoint = f"/subscriptions/{{sub_id}}/resourceGroups/{{rg}}/providers/Microsoft.Compute/virtualMachines"
+                if rg_val:
+                    target_endpoint = f"/subscriptions/{{sub_val}}/resourceGroups/{{rg_val}}/providers/Microsoft.Compute/virtualMachines"
                 else:
-                    target_endpoint = f"/subscriptions/{{sub_id}}/providers/Microsoft.Compute/virtualMachines"
+                    target_endpoint = f"/subscriptions/{{sub_val}}/providers/Microsoft.Compute/virtualMachines"
 
         if "api-version=" not in target_endpoint and "api-version" not in args:
             if "Microsoft.Web" in target_endpoint or any(w in srv_lower for w in ["app_service", "appservice"]):
@@ -459,20 +497,33 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
     if is_ado:
         if "api-version=" not in target_endpoint and "api-version" not in args:
             args["api-version"] = "7.1"
-        proj = creds.get("project") or creds.get("project_name")
-        if proj and "/_apis/" in target_endpoint and f"/{{proj}}/" not in target_endpoint:
+        if proj_val and "/_apis/" in target_endpoint and f"/{{proj_val}}/" not in target_endpoint:
             if any(sub in target_endpoint for sub in ["/_apis/git", "/_apis/pipelines", "/_apis/build", "/_apis/wit", "/_apis/work", "/_apis/release"]):
-                target_endpoint = target_endpoint.replace("/_apis/", f"/{{proj}}/_apis/")
+                target_endpoint = target_endpoint.replace("/_apis/", f"/{{proj_val}}/_apis/")
 
     if target_endpoint.startswith("http://") or target_endpoint.startswith("https://"):
         url = target_endpoint
     else:
         url = f"{{base}}/{{target_endpoint.lstrip('/')}}"
 
-    # Clean out empty/None arguments
+    # Clean out empty/None arguments and path parameters so they do not pollute query string
     clean_args = {{k: v for k, v in args.items() if v is not None and str(v).strip() != ""}}
     api_ver = clean_args.pop("api-version", None)
     query_params = {{"api-version": api_ver}} if api_ver and "api-version=" not in url else {{}}
+
+    # Remove substituted path variables from query params
+    path_param_keys = [
+        "vm_name", "virtual_machine_name", "vmName", "target_vm",
+        "resource_group", "resource_group_name", "resourceGroupName", "rg", "rg_name",
+        "subscription_id", "subscriptionId", "sub_id", "subscription",
+        "app_name", "appName", "site_name", "siteName", "webapp_name", "web_app",
+        "project", "projectName", "projectId", "project_id",
+        "repo", "repository", "repositoryId", "repository_id",
+        "pipelineId", "pipeline_id", "buildId", "build_id", "groupId", "group_id",
+        "pullRequestId", "pull_request_id", "incident_id", "sys_id", "number"
+    ]
+    for pk in path_param_keys:
+        clean_args.pop(pk, None)
     
     try:
         with httpx.Client(verify=False, auth=auth, headers=headers, timeout=25.0, follow_redirects=True) as client:
