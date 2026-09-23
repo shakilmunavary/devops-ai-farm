@@ -1,0 +1,39 @@
+trigger: none # Manual trigger only
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: vg-mcp-ai-portal
+
+parameters:
+  - name: confirmDestroy
+    displayName: 'Type "DESTROY" to confirm resource teardown:'
+    type: string
+    default: 'NO'
+
+stages:
+  - stage: DestroyInfrastructure
+    displayName: 'Destroy MCP Portal Azure Infrastructure'
+    jobs:
+      - job: Teardown
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Delete MCP Portal Web App & Plan'
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                if [ "${{ parameters.confirmDestroy }}" != "DESTROY" ]; then
+                  echo "❌ Confirmation failed. Set confirmDestroy to 'DESTROY' to execute teardown."
+                  exit 1
+                fi
+
+                echo "🗑️ Deleting Web App: $(WEB_APP_NAME) in $(RESOURCE_GROUP_NAME)..."
+                az webapp delete --name $(WEB_APP_NAME) --resource-group $(RESOURCE_GROUP_NAME) || true
+
+                echo "🗑️ Deleting App Service Plan: $(APP_SERVICE_PLAN_NAME)..."
+                az appservice plan delete --name $(APP_SERVICE_PLAN_NAME) --resource-group $(RESOURCE_GROUP_NAME) --yes || true
+
+                echo "🎉 MCP AI Portal Azure resources successfully destroyed."

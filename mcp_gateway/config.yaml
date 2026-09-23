@@ -1,0 +1,17 @@
+port: 5001
+targets:
+- name: azure_devops
+  transport: stdio
+  command: C:\Program Files\Python314\python.exe
+  args:
+  - D:\mcp-ai\mcp-ai-portal\mcp_servers\azure_devops\server.py
+- name: azure_app_service
+  transport: stdio
+  command: C:\Program Files\Python314\python.exe
+  args:
+  - D:\mcp-ai\mcp-ai-portal\mcp_servers\azure_app_service\server.py
+- name: azure_vm
+  transport: stdio
+  command: C:\Program Files\Python314\python.exe
+  args:
+  - D:\mcp-ai\mcp-ai-portal\mcp_servers\azure_vm\server.py

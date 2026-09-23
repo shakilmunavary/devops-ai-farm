@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Universal MCP AI & AIOps Platform - 4-Pillar Architecture</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.4)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.8)); }
+    }
+    @keyframes flowLine {
+      from { stroke-dashoffset: 30; }
+      to { stroke-dashoffset: 0; }
+    }
+    .animate-flow {
+      stroke-dasharray: 6 6;
+      animation: flowLine 1.2s linear infinite;
+    }
+    .pillar-card {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .pillar-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 30px -10px rgba(0, 0, 0, 0.6);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased p-6 font-sans">
+  <div class="max-w-7xl mx-auto space-y-8">
+
+    <!-- Platform Header Banner -->
+    <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+      <div class="absolute -right-16 -top-16 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -left-16 -bottom-16 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="flex flex-wrap items-center justify-between gap-6 relative z-10">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-semibold uppercase tracking-wider mb-3">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+            Unified Multi-Feature AI Platform
+          </div>
+          <h1 class="text-3xl md:text-4xl font-black tracking-tight text-white flex items-center gap-3">
+            <span>🌐 Universal MCP AI & AIOps Platform</span>
+          </h1>
+          <p class="text-slate-400 text-sm md:text-base mt-2 max-w-3xl">
+            Autonomous FastMCP Server Builder, Multi-Agent Bot Engine, ServiceNow Governance & Runbook Automation (RBA), and Model-Agnostic Chat Copilot.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2.5">
+          <span class="px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold">FastMCP Standard</span>
+          <span class="px-3 py-1.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-semibold">Mistral / Groq LLM</span>
+          <span class="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">Native ServiceNow ITSM</span>
+          <span class="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">Azure ARM & ADO</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 CORE PILLARS GRID -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+          <span>🏛️ The 4 Core Platform Pillars</span>
+        </h2>
+        <span class="text-xs text-slate-400 font-mono">End-to-End Autonomous Workflows</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+
+        <!-- PILLAR 1: Autonomous MCP Server Builder -->
+        <div class="pillar-card bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-xl font-bold">
+                ⚙️
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">Pillar 1</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Autonomous MCP Builder</h3>
+            <p class="text-xs text-slate-400 mt-1">Interactive multi-turn AI architect that generates production-grade FastMCP servers from natural language or API specs.</p>
+            
+            <div class="mt-4 space-y-2 text-xs">
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-cyan-400 font-bold">✓</span> FastMCP Code Synthesis
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-cyan-400 font-bold">✓</span> Per-Server Isolated <code class="text-cyan-300 text-[10px]">.env</code>
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-cyan-400 font-bold">✓</span> Live Tool Test Sandbox
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-cyan-400 font-mono">
+            Output: /mcp_servers/&lt;name&gt;/server.py
+          </div>
+        </div>
+
+        <!-- PILLAR 2: AI Bot & Multi-Agent Builder -->
+        <div class="pillar-card bg-slate-900/90 border border-purple-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 text-xl font-bold">
+                🤖
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">Pillar 2</span>
+            </div>
+            <h3 class="text-base font-bold text-white">AI Bot & Agent Builder</h3>
+            <p class="text-xs text-slate-400 mt-1">Multi-agent orchestrator with customizable personas, selective tool mounting, autonomous loops, and RCA timeline analysis.</p>
+            
+            <div class="mt-4 space-y-2 text-xs">
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-purple-400 font-bold">✓</span> Multi-Turn Agent Loop
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-purple-400 font-bold">✓</span> RCA & Execution Timeline
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-purple-400 font-bold">✓</span> Cron & Webhook Triggers
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-purple-400 font-mono">
+            Engine: bot_engine.py
+          </div>
+        </div>
+
+        <!-- PILLAR 3: AIOps ServiceNow RBA -->
+        <div class="pillar-card bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xl font-bold">
+                ⚡
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Pillar 3</span>
+            </div>
+            <h3 class="text-base font-bold text-white">AIOps ServiceNow RBA</h3>
+            <p class="text-xs text-slate-400 mt-1">Service Catalog lifecycle automation with dynamic form fields, Scripted REST approvals, and autonomous closed-loop execution.</p>
+            
+            <div class="mt-4 space-y-2 text-xs">
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> Dynamic Form Variables
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> Scripted REST Approvals
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-emerald-400 font-bold">✓</span> Auto WorkNotes & Closure
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-emerald-400 font-mono">
+            Module: aiops-snow/
+          </div>
+        </div>
+
+        <!-- PILLAR 4: Universal AI Chat Copilot -->
+        <div class="pillar-card bg-slate-900/90 border border-blue-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 text-xl font-bold">
+                💬
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">Pillar 4</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Universal AI Chat Copilot</h3>
+            <p class="text-xs text-slate-400 mt-1">Real-time conversational assistant equipped with live MCP tool execution, telemetry streaming, and provider model switching.</p>
+            
+            <div class="mt-4 space-y-2 text-xs">
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-blue-400 font-bold">✓</span> Model-Agnostic LLM Adapter
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-blue-400 font-bold">✓</span> Direct Tool Execution in Chat
+              </div>
+              <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-300 flex items-center gap-2">
+                <span class="text-blue-400 font-bold">✓</span> Multi-Provider Fallback
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-blue-400 font-mono">
+            Adapter: llm_adapter.py
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CENTRAL MCP GATEWAY & TARGET PLATFORMS -->
+    <div class="bg-gradient-to-b from-slate-900 to-indigo-950/50 border border-indigo-500/40 rounded-3xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-xl font-bold">
+            🔌
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white">Central MCP Gateway Hub (Port 5001)</h3>
+            <p class="text-xs text-slate-400">Multiplexes requests from all 4 pillars to securely execute tools across target platforms.</p>
+          </div>
+        </div>
+        <span class="text-xs font-mono px-3 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">API Key Authentication</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Target 1: Azure VMs -->
+        <div class="p-4 rounded-xl bg-slate-950/90 border border-slate-800">
+          <div class="flex items-center gap-2 text-blue-400 font-bold text-xs uppercase mb-2">
+            <span>🖥️</span> Azure Virtual Machines
+          </div>
+          <p class="text-xs text-slate-400">Start, Deallocate (₹0 compute), Restart, and live state polling validation.</p>
+        </div>
+
+        <!-- Target 2: Azure App Service -->
+        <div class="p-4 rounded-xl bg-slate-950/90 border border-slate-800">
+          <div class="flex items-center gap-2 text-cyan-400 font-bold text-xs uppercase mb-2">
+            <span>🌐</span> Azure App Service
+          </div>
+          <p class="text-xs text-slate-400">Restart web apps, query configuration, and verify HTTP 200 health probes.</p>
+        </div>
+
+        <!-- Target 3: Azure DevOps -->
+        <div class="p-4 rounded-xl bg-slate-950/90 border border-slate-800">
+          <div class="flex items-center gap-2 text-purple-400 font-bold text-xs uppercase mb-2">
+            <span>🚀</span> Azure DevOps CI/CD
+          </div>
+          <p class="text-xs text-slate-400">List builds, trigger deployment pipelines, and inspect release logs.</p>
+        </div>
+
+        <!-- Target 4: ServiceNow ITSM -->
+        <div class="p-4 rounded-xl bg-slate-950/90 border border-slate-800">
+          <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase mb-2">
+            <span>📋</span> ServiceNow ITSM
+          </div>
+          <p class="text-xs text-slate-400">Manage Catalog items, dynamic variables, approvals, and ticket closure.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

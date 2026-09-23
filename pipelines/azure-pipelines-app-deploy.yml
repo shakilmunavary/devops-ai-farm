@@ -1,0 +1,69 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - infra/**
+      - pipelines/**
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: vg-mcp-ai-portal
+
+stages:
+  - stage: PackagePortal
+    displayName: 'Package MCP AI Portal'
+    jobs:
+      - job: Package
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.11'
+              addToPath: true
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: 'Validate Dependencies'
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Code & Servers'
+            inputs:
+              rootFolderOrFile: '$(Build.SourcesDirectory)'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/mcp-portal-$(Build.BuildId).zip'
+              replaceExistingArchive: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Portal Artifact'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/mcp-portal-$(Build.BuildId).zip'
+              ArtifactName: 'portal-drop'
+
+  - stage: DeployToAzure
+    displayName: 'Deploy Portal to Azure App Service'
+    dependsOn: PackagePortal
+    condition: succeeded()
+    jobs:
+      - job: DeployWebApp
+        steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'portal-drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to Azure Linux Web App'
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              appType: 'webAppLinux'
+              appName: $(WEB_APP_NAME)
+              package: '$(System.ArtifactsDirectory)/portal-drop/*.zip'
+              runtimeStack: 'PYTHON|3.11'
+              startUpCommand: 'bash startup.sh'

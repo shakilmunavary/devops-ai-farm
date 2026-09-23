@@ -1,0 +1,55 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/**
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: vg-mcp-ai-portal
+
+stages:
+  - stage: ValidateBicep
+    displayName: 'Validate Bicep'
+    jobs:
+      - job: Validate
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Validate Bicep Template'
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az bicep build --file ./infra/main.bicep
+                az deployment group validate \
+                  --resource-group $(RESOURCE_GROUP_NAME) \
+                  --template-file ./infra/main.bicep \
+                  --parameters ./infra/parameters.json \
+                  --parameters environmentName=$(ENVIRONMENT_NAME)
+
+  - stage: DeployInfra
+    displayName: 'Deploy MCP Portal Infrastructure'
+    dependsOn: ValidateBicep
+    condition: succeeded()
+    jobs:
+      - job: Deploy
+        steps:
+          - task: AzureResourceManagerTemplateDeployment@3
+            displayName: 'Deploy MCP Portal App Service'
+            inputs:
+              deploymentScope: 'Resource Group'
+              azureResourceManagerConnection: $(AZURE_SERVICE_CONNECTION)
+              subscriptionId: ''
+              action: 'Create Or Update Resource Group'
+              resourceGroupName: $(RESOURCE_GROUP_NAME)
+              location: $(LOCATION)
+              templateLocation: 'Linked artifact'
+              csmFile: '$(Build.SourcesDirectory)/infra/main.bicep'
+              csmParametersFile: '$(Build.SourcesDirectory)/infra/parameters.json'
+              overrideParameters: '-environmentName $(ENVIRONMENT_NAME) -appServicePlanSku $(APP_SERVICE_PLAN_SKU) -mcpPortalAppName $(WEB_APP_NAME) -defaultLlmProvider $(LLM_PROVIDER) -defaultLlmModel $(LLM_MODEL) -defaultLlmEndpoint $(LLM_ENDPOINT)'
+              deploymentMode: 'Incremental'

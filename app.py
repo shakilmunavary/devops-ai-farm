@@ -1,0 +1,1963 @@
+"""
+AI MCP Server Kit - Universal Multi-Turn Conversational AI Architect & Dynamic Generator
+Powered by Mistral AI LLM for Dynamic Real-Time Tool & Schema Discovery.
+"""
+
+import os
+import sys
+import json
+import re
+import logging
+import subprocess
+import httpx
+import base64
+from datetime import datetime
+try:
+    import keyring
+except ImportError:
+    keyring = None
+from flask import Flask, render_template, request, jsonify
+from dotenv import load_dotenv
+
+# Load root environment variables
+load_dotenv()
+
+from platform_specs import get_all_platforms, get_platform_spec, find_platform_by_query
+from gateway_manager import gateway_mgr, get_current_gateway_api_key, set_current_gateway_api_key
+from mistral_service import (
+    get_mistral_api_key, set_mistral_api_key, call_mistral_mcp_architect,
+    sanitize_tool_parameters, chat_with_mcp_architect, chat_with_mcp_agent,
+    chat_with_bot_architect, session_mgr
+)
+from bot_engine import bot_registry, run_bot_workflow, synthesize_bot_with_mistral, daemon_manager
+from llm_adapter import llm_client, PROVIDER_PRESETS, UniversalLLMClient
+from storage_config import PERSISTENT_DATA_DIR, CONFIG_JSON_PATH, BOTS_DIR, SERVERS_DIR, LLM_CONFIG_PATH, GATEWAY_CONFIG_PATH, BASE_DIR
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("app")
+
+app = Flask(__name__, template_folder="templates")
+
+# Auto-start embedded MCP Gateway background service
+try:
+    gateway_mgr.start_gateway()
+    logger.info("Embedded MCP Gateway started successfully.")
+except Exception as e:
+    logger.warning(f"Gateway startup notice: {e}")
+
+
+def load_server_registry() -> dict:
+    if not os.path.exists(CONFIG_JSON_PATH):
+        return {"servers": {}}
+    try:
+        with open(CONFIG_JSON_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            for s_id, s_data in (data.get("servers", {}) or {}).items():
+                env_file = os.path.join(SERVERS_DIR, s_id, ".env")
+                if not os.path.exists(env_file):
+                    env_file = os.path.join(BASE_DIR, "mcp_servers", s_id, ".env")
+                scopes = {}
+                if os.path.exists(env_file):
+                    try:
+                        with open(env_file, "r", encoding="utf-8") as ef:
+                            for line in ef:
+                                line = line.strip()
+                                if line and not line.startswith("#") and "=" in line:
+                                    k, v = line.split("=", 1)
+                                    k_l = k.strip().lower()
+                                    if any(w in k_l for w in ["owner", "org", "organization", "username", "user", "project", "workspace", "account"]):
+                                        scopes[k_l] = v.strip()
+                                        if "owner" in k_l or "org" in k_l:
+                                            scopes["org"] = v.strip()
+                                            scopes["owner"] = v.strip()
+                    except Exception:
+                        pass
+                s_data["scope"] = scopes
+                # Ensure all server tools are sanitized from accidental credentials
+                if "all_tools" in s_data:
+                    s_data["all_tools"] = sanitize_tool_parameters(s_data["all_tools"])
+                if "tools" in s_data:
+                    s_data["tools"] = sanitize_tool_parameters(s_data["tools"])
+            return data
+    except Exception as e:
+        logger.error(f"Error reading config.json: {e}")
+        return {"servers": {}}
+
+
+def save_server_registry(data: dict) -> None:
+    with open(CONFIG_JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def write_server_env_file(platform_id: str, config_values: dict) -> str:
+    server_dir = os.path.join(SERVERS_DIR, platform_id)
+    os.makedirs(server_dir, exist_ok=True)
+    env_file_path = os.path.join(server_dir, ".env")
+
+    lines = [f"# MCP Server Credentials for {platform_id}\n"]
+    for k, v in config_values.items():
+        env_var_name = k.upper()
+        lines.append(f"{env_var_name}={v}\n")
+
+    with open(env_file_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    logger.info(f"Wrote local credentials into {env_file_path}")
+    return env_file_path
+
+
+def generate_dynamic_mcp_server_script(server_id: str, server_name: str, base_url: str, auth_header: str, tools: list = None) -> str:
+    """
+    Generates isolated, self-contained FastMCP server scripts.
+    Strictly sandboxes credentials per-server using dotenv_values from the server's dedicated .env.
+    Never pollutes or reads shared global os.environ variables.
+    Provides intelligent adaptive routing for ServiceNow, Azure ARM, Azure DevOps, and generic REST APIs.
+    """
+    tools = tools or []
+    code = f'''#!/usr/bin/env python3
+"""
+FastMCP Server for {server_name} (ID: {server_id})
+Auto-generated by Universal MCP AI Platform with strict per-server isolation.
+"""
+
+import os
+import sys
+import json
+import base64
+import re
+import httpx
+from typing import Dict, Any, List, Optional
+from dotenv import dotenv_values
+
+try:
+    from fastmcp import FastMCP
+except ImportError:
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError:
+        try:
+            from mcp.server.mcpserver import MCPServer as FastMCP
+        except ImportError:
+            try:
+                from mcp.server import Server as FastMCP
+            except ImportError:
+                class FastMCP:
+                    def __init__(self, name=""):
+                        self.name = name
+                    def tool(self, *args, **kwargs):
+                        def decorator(fn):
+                            return fn
+                        return decorator
+                    def run(self, *args, **kwargs):
+                        pass
+
+mcp = FastMCP("{server_id}-server")
+SERVICE_NAME = "mcp_{server_id}"
+_AZURE_TOKEN_CACHE = {{"token": "", "expires_at": 0}}
+
+def get_credentials() -> Dict[str, str]:
+    """Strictly loads credentials from this server\'s private .env file without reading global os.environ."""
+    creds = {{
+        "base_url": "{base_url}",
+        "auth_val": "{auth_header}",
+        "username": ""
+    }}
+    
+    # 1. Look for .env in current server folder
+    srv_dir = os.path.dirname(os.path.abspath(__file__))
+    env_file = os.path.join(srv_dir, ".env")
+    raw_env = {{}}
+    
+    if os.path.exists(env_file):
+        try:
+            raw_env = dotenv_values(env_file)
+        except Exception:
+            pass
+            
+    # 2. Check persistent storage location if not found
+    if not raw_env:
+        alt_paths = [
+            os.path.join("/home/data/mcp_storage", "mcp_servers", "{server_id}", ".env"),
+            os.path.join(srv_dir, "..", "persistent_data", "mcp_servers", "{server_id}", ".env")
+        ]
+        for p in alt_paths:
+            if os.path.exists(p):
+                try:
+                    raw_env = dotenv_values(p)
+                    break
+                except Exception:
+                    pass
+
+    for k, v in (raw_env or {{}}).items():
+        if not v:
+            continue
+        k_upper = str(k).upper().strip()
+        v_str = str(v).strip()
+        if k_upper in ["TENANT_ID", "TENANT", "AZURE_TENANT_ID", "AZURE_TENANT"]:
+            creds["tenant_id"] = v_str
+            creds["azure_tenant_id"] = v_str
+        elif k_upper in ["CLIENT_ID", "APP_ID", "AZURE_CLIENT_ID", "AZURE_APP_ID"]:
+            creds["client_id"] = v_str
+            creds["azure_client_id"] = v_str
+            creds["username"] = v_str
+        elif k_upper in ["CLIENT_SECRET", "APP_SECRET", "AZURE_CLIENT_SECRET", "AZURE_APP_SECRET"]:
+            creds["client_secret"] = v_str
+            creds["azure_client_secret"] = v_str
+            creds["auth_val"] = v_str
+        elif k_upper in ["SUBSCRIPTION_ID", "SUBSCRIPTION", "SUB_ID", "AZURE_SUBSCRIPTION_ID"]:
+            creds["subscription_id"] = v_str
+            creds["azure_subscription_id"] = v_str
+        elif k_upper in ["RESOURCE_GROUP", "RESOURCEGROUP", "RG", "RESOURCE_GROUP_NAME", "RG_NAME", "AZURE_RESOURCE_GROUP"]:
+            creds["resource_group"] = v_str
+            creds["azure_resource_group"] = v_str
+        elif k_upper in ["ORGANIZATION_NAME", "ORGANIZATION", "ORG", "ORG_NAME", "OWNER", "ACCOUNT", "WORKSPACE"]:
+            creds["org"] = v_str
+            creds["organization"] = v_str
+            creds["organization_name"] = v_str
+        elif k_upper in ["PROJECT_NAME", "PROJECT", "PROJECT_ID", "PROJECT_KEY"]:
+            creds["project"] = v_str
+            creds["project_name"] = v_str
+        elif k_upper in ["INSTANCE", "INSTANCE_NAME", "INSTANCE_URL", "SUBDOMAIN", "SNOW_INSTANCE"]:
+            creds["instance"] = v_str
+            creds["instance_name"] = v_str
+            if "service-now.com" in v_str:
+                creds["base_url"] = v_str
+        elif k_upper in ["PERSONAL_ACCESS_TOKEN", "PAT", "API_TOKEN", "TOKEN", "SECRET", "PASSWORD", "AUTH", "AUTH_HEADER", "API_KEY"]:
+            creds["auth_val"] = v_str
+        elif k_upper in ["USERNAME", "USER_ID", "EMAIL", "USER"]:
+            creds["username"] = v_str
+        elif k_upper in ["BASE_URL", "URL", "HOST", "ENDPOINT"]:
+            creds["base_url"] = v_str
+        else:
+            creds[str(k).lower()] = v_str
+
+    srv_lower = "{server_id}".lower()
+    org = creds.get("org") or creds.get("organization") or creds.get("organization_name") or ""
+    proj = creds.get("project") or creds.get("project_name") or ""
+    inst = creds.get("instance") or creds.get("instance_name") or ""
+
+    # Hard-pin base URLs per platform to prevent ANY cross-server pollution
+    if any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"]):
+        creds["base_url"] = f"https://dev.azure.com/{{org}}" if org else "https://dev.azure.com"
+    elif any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
+        creds["base_url"] = "https://management.azure.com"
+    elif any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
+        if inst and not inst.startswith("http"):
+            creds["base_url"] = f"https://{{inst}}.service-now.com"
+        elif inst:
+            creds["base_url"] = inst
+        elif not creds.get("base_url") or "api.service.com" in creds.get("base_url"):
+            creds["base_url"] = "https://dev.service-now.com"
+    elif "github" in srv_lower:
+        creds["base_url"] = "https://api.github.com"
+    elif "gitlab" in srv_lower:
+        creds["base_url"] = "https://gitlab.com/api/v4"
+    elif "slack" in srv_lower:
+        creds["base_url"] = "https://slack.com/api"
+    elif any(w in srv_lower for w in ["jira", "atlassian"]):
+        if inst and not inst.startswith("http"):
+            creds["base_url"] = f"https://{{inst}}.atlassian.net"
+
+    creds["base_url"] = creds["base_url"].rstrip("/")
+    return creds
+
+def get_headers_and_auth(creds: Dict[str, str]):
+    global _AZURE_TOKEN_CACHE
+    headers = {{
+        "Accept": "application/json, application/vnd.github.v3+json, text/plain, */*",
+        "Content-Type": "application/json",
+        "User-Agent": "MCP-Gateway-Universal/2.0"
+    }}
+    auth = None
+    u = creds.get("username")
+    p = creds.get("auth_val")
+    srv_lower = "{server_id}".lower()
+
+    # 1. Azure DevOps PAT Basic Auth
+    if any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"]):
+        if p:
+            b64_val = base64.b64encode(f":{{p}}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {{b64_val}}"
+            auth = ("", p)
+    # 2. Azure OAuth2 Client Credentials
+    elif any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
+        tenant = creds.get("tenant_id") or creds.get("azure_tenant_id") or ""
+        client_id = creds.get("client_id") or creds.get("azure_client_id") or ""
+        client_secret = creds.get("client_secret") or creds.get("azure_client_secret") or p or ""
+        
+        import time
+        now = time.time()
+        if _AZURE_TOKEN_CACHE.get("token") and _AZURE_TOKEN_CACHE.get("expires_at", 0) > now + 60:
+            headers["Authorization"] = f"Bearer {{_AZURE_TOKEN_CACHE['token']}}"
+        elif tenant and client_id and client_secret:
+            try:
+                token_url = f"https://login.microsoftonline.com/{{tenant}}/oauth2/v2.0/token"
+                token_data = {{
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "scope": "https://management.azure.com/.default"
+                }}
+                with httpx.Client(timeout=10.0) as token_client:
+                    t_res = token_client.post(token_url, data=token_data)
+                    if t_res.status_code == 200:
+                        tok = t_res.json().get("access_token")
+                        exp_in = t_res.json().get("expires_in", 3600)
+                        _AZURE_TOKEN_CACHE["token"] = tok
+                        _AZURE_TOKEN_CACHE["expires_at"] = now + int(exp_in)
+                        headers["Authorization"] = f"Bearer {{tok}}"
+            except Exception:
+                if p:
+                    headers["Authorization"] = f"Bearer {{p}}"
+        elif p:
+            headers["Authorization"] = f"Bearer {{p}}"
+    # 3. ServiceNow Basic Auth
+    elif any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
+        if u and p:
+            auth = (u, p)
+            b64_val = base64.b64encode(f"{{u}}:{{p}}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {{b64_val}}"
+        elif p:
+            headers["Authorization"] = f"Bearer {{p}}"
+    # 4. Standard Basic Auth or Bearer Token
+    elif u and p:
+        auth = (u, p)
+        try:
+            b64_val = base64.b64encode(f"{{u}}:{{p}}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {{b64_val}}"
+        except Exception:
+            pass
+    elif p:
+        headers["Authorization"] = f"Bearer {{p}}"
+            
+    return headers, auth
+'''
+
+    for t in tools:
+        fn_name = re.sub(r'[^a-zA-Z0-9_]', '_', t.get("name", "custom_call"))
+        desc = t.get("description", f"Execute {fn_name}").replace('"', '\"')
+        method = t.get("method", "POST" if any(k in fn_name for k in ["create", "trigger", "post", "update", "delete", "add", "merge", "cancel", "lock", "start", "stop", "abort", "apply", "patch", "upload", "deploy", "submit", "close", "reopen", "put", "swap", "scale", "restart", "deallocate", "attach", "detach", "resize"]) else "GET").upper()
+        
+        endpoint = t.get("endpoint") or t.get("path") or f"/{fn_name}"
+
+        code += f'''
+
+@mcp.tool()
+def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
+    """{desc}"""
+    creds = get_credentials()
+    base = creds["base_url"]
+    headers, auth = get_headers_and_auth(creds)
+    srv_lower = "{server_id}".lower()
+    
+    args = dict(kwargs)
+    if isinstance(path_or_params, dict):
+        args.update(path_or_params)
+        
+    target_endpoint = "{endpoint}"
+    if " or " in target_endpoint:
+        target_endpoint = target_endpoint.split(" or ")[0].strip()
+    if " OR " in target_endpoint:
+        target_endpoint = target_endpoint.split(" OR ")[0].strip()
+    if "," in target_endpoint:
+        target_endpoint = target_endpoint.split(",")[0].strip()
+
+    # Smart ServiceNow handling (INC number resolution & state translation)
+    if any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
+        state_val = args.get("state")
+        if isinstance(state_val, str) and not state_val.isdigit():
+            state_map = {{
+                "new": "1",
+                "in_progress": "2",
+                "on_hold": "3",
+                "resolved": "6",
+                "closed": "7",
+                "canceled": "8",
+                "cancelled": "8"
+            }}
+            if state_val.lower() in state_map:
+                args["state"] = state_map[state_val.lower()]
+
+        # Check for incident identifier
+        inc_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id")
+        if inc_val and (str(inc_val).upper().startswith("INC") or len(str(inc_val)) != 32):
+            if "/table/incident" in target_endpoint:
+                target_endpoint = "/api/now/table/incident"
+                args.pop("incident_id", None)
+                args.pop("sys_id", None)
+                args.pop("id", None)
+                args["sysparm_query"] = f"number={{inc_val}}"
+
+    # Substitute parameters passed in tool call (handles snake_case, camelCase, and clean aliases)
+    for k, v in list(args.items()):
+        if v is not None and str(v).strip() != "":
+            k_str = str(k)
+            k_no_us = k_str.replace("_", "")
+            target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_str) + r'|' + re.escape(k_no_us) + r')\\}}', str(v), target_endpoint, flags=re.IGNORECASE)
+
+    # Domain specific alias replacements
+    vm_val = args.get("vm_name") or args.get("virtual_machine_name") or args.get("name")
+    if vm_val:
+        target_endpoint = re.sub(r'\\{{(?:vm_?name|virtual_?machine(?:_?name)?|name)\\}}', str(vm_val), target_endpoint, flags=re.IGNORECASE)
+
+    app_val = args.get("app_name") or args.get("name") or args.get("site_name") or args.get("webapp_name")
+    if app_val:
+        target_endpoint = re.sub(r'\\{{(?:app_?name|name|site_?name|webapp_?name)\\}}', str(app_val), target_endpoint, flags=re.IGNORECASE)
+
+    item_id_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id") or args.get("item_id") or args.get("record_id")
+    if item_id_val:
+        target_endpoint = re.sub(r'\\{{(?:incident_?id|sys_?id|record_?id|item_?id|number|id)\\}}', str(item_id_val), target_endpoint, flags=re.IGNORECASE)
+
+    # Auto-substitute configured scope values (org, owner, subscription, resource_group, project, etc.)
+    sub_val = creds.get("subscription_id") or creds.get("azure_subscription_id") or ""
+    rg_val = creds.get("resource_group") or creds.get("azure_resource_group") or ""
+    org_val = creds.get("org") or creds.get("organization") or creds.get("organization_name") or ""
+    proj_val = creds.get("project") or creds.get("project_name") or ""
+
+    if sub_val:
+        target_endpoint = re.sub(r'\\{{(?:subscription_?id|sub_?id|subscription)\\}}', str(sub_val), target_endpoint, flags=re.IGNORECASE)
+    if rg_val:
+        target_endpoint = re.sub(r'\\{{(?:resource_?group(?:_?name)?|rg(?:_?name)?)\\}}', str(rg_val), target_endpoint, flags=re.IGNORECASE)
+    if org_val:
+        target_endpoint = re.sub(r'\\{{(?:org(?:anization)?(?:_?name)?|owner)\\}}', str(org_val), target_endpoint, flags=re.IGNORECASE)
+    if proj_val:
+        target_endpoint = re.sub(r'\\{{(?:project(?:_?(?:name|id|key))?)\\}}', str(proj_val), target_endpoint, flags=re.IGNORECASE)
+
+    for k, v in list(creds.items()):
+        if not v or k in ["base_url", "auth_val"]:
+            continue
+        k_clean = str(k).lower()
+        k_no_us = k_clean.replace("_", "")
+        target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_clean) + r'|' + re.escape(k_no_us) + r')\\}}', str(v), target_endpoint, flags=re.IGNORECASE)
+
+    # Azure ARM: Auto-format ARM endpoint and API version (only for Azure ARM, not Azure DevOps)
+    is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
+    is_arm = not is_ado and any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"])
+
+    if is_arm:
+        sub_id = creds.get("subscription_id") or creds.get("azure_subscription_id") or ""
+        rg = creds.get("resource_group") or creds.get("azure_resource_group") or ""
+        
+        if "/subscriptions/" not in target_endpoint:
+            if any(w in srv_lower for w in ["app_service", "appservice", "web"]):
+                target_endpoint = f"/subscriptions/{{sub_id}}/resourceGroups/{{rg}}/providers/Microsoft.Web/sites"
+            elif any(w in srv_lower for w in ["vm", "compute", "iaas"]):
+                if rg:
+                    target_endpoint = f"/subscriptions/{{sub_id}}/resourceGroups/{{rg}}/providers/Microsoft.Compute/virtualMachines"
+                else:
+                    target_endpoint = f"/subscriptions/{{sub_id}}/providers/Microsoft.Compute/virtualMachines"
+
+        if "api-version=" not in target_endpoint and "api-version" not in args:
+            if "Microsoft.Web" in target_endpoint or any(w in srv_lower for w in ["app_service", "appservice"]):
+                args["api-version"] = "2022-03-01"
+            elif "Microsoft.Compute" in target_endpoint or any(w in srv_lower for w in ["vm", "compute"]):
+                args["api-version"] = "2023-03-01"
+            else:
+                args["api-version"] = "2021-04-01"
+
+    # Azure DevOps: Ensure api-version and project scoping
+    if is_ado:
+        if "api-version=" not in target_endpoint and "api-version" not in args:
+            args["api-version"] = "7.1"
+        proj = creds.get("project") or creds.get("project_name")
+        if proj and "/_apis/" in target_endpoint and f"/{{proj}}/" not in target_endpoint:
+            if any(sub in target_endpoint for sub in ["/_apis/git", "/_apis/pipelines", "/_apis/build", "/_apis/wit", "/_apis/work", "/_apis/release"]):
+                target_endpoint = target_endpoint.replace("/_apis/", f"/{{proj}}/_apis/")
+
+    if target_endpoint.startswith("http://") or target_endpoint.startswith("https://"):
+        url = target_endpoint
+    else:
+        url = f"{{base}}/{{target_endpoint.lstrip('/')}}"
+
+    # Clean out empty/None arguments
+    clean_args = {{k: v for k, v in args.items() if v is not None and str(v).strip() != ""}}
+    api_ver = clean_args.pop("api-version", None)
+    query_params = {{"api-version": api_ver}} if api_ver and "api-version=" not in url else {{}}
+    
+    try:
+        with httpx.Client(verify=False, auth=auth, headers=headers, timeout=25.0, follow_redirects=True) as client:
+            if "{method}" == "GET":
+                if api_ver and "api-version" not in clean_args:
+                    clean_args["api-version"] = api_ver
+                res = client.get(url, params=clean_args)
+                # Universal fallback: If 404 on direct path /item/{id}, retry with search query
+                if res.status_code == 404:
+                    path_parts = url.rstrip("/").split("/")
+                    last_seg = path_parts[-1]
+                    if len(last_seg) > 2 and not last_seg.startswith("?"):
+                        parent_url = "/".join(path_parts[:-1])
+                        if any(w in srv_lower for w in ["servicenow", "snow"]):
+                            res_alt = client.get(parent_url, params={{**clean_args, "sysparm_query": f"number={{last_seg}}"}})
+                            if res_alt.status_code in [200, 201]:
+                                res = res_alt
+            elif "{method}" == "DELETE":
+                if api_ver and "api-version" not in clean_args:
+                    clean_args["api-version"] = api_ver
+                res = client.delete(url, params=clean_args)
+            elif "{method}" == "PUT":
+                res = client.put(url, params=query_params, json=clean_args if clean_args else None)
+            elif "{method}" == "PATCH":
+                res = client.patch(url, params=query_params, json=clean_args if clean_args else None)
+            else:
+                res = client.post(url, params=query_params, json=clean_args if clean_args else None)
+
+            if res.status_code in [200, 201, 202, 204]:
+                resp_text = res.text.strip() if (res.text and res.text.strip()) else '{{"status": "success"}}'
+                return f"**{fn_name} ({{res.status_code}}):**\\n```json\\n{{resp_text}}\\n```"
+            else:
+                return f"API Response ({{res.status_code}}): {{res.text[:500]}}"
+    except Exception as e:
+        return f"Error executing {fn_name}: {{e}}"
+'''
+
+    code += '''
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+'''
+    return code
+
+
+def ensure_server_script(platform_id: str, config_values: dict = None, tools: list = None) -> str:
+    server_dir = os.path.join(SERVERS_DIR, platform_id)
+    os.makedirs(server_dir, exist_ok=True)
+    server_script = os.path.join(server_dir, "server.py")
+
+    spec = get_platform_spec(platform_id)
+    name = spec.get("name", platform_id) if spec else platform_id.capitalize()
+    base_url = (config_values or {}).get("base_url", (config_values or {}).get("instance_url", "https://api.service.com"))
+    auth_header = (config_values or {}).get("auth_header", (config_values or {}).get("password", (config_values or {}).get("api_token", "")))
+    tools_list = tools or (spec.get("tools", []) if spec else [])
+
+    # Always generate fresh server script with all active tools
+    code = generate_dynamic_mcp_server_script(platform_id, name, base_url, auth_header, tools_list)
+    with open(server_script, "w", encoding="utf-8") as f:
+        f.write(code)
+
+    logger.info(f"Generated server script at {server_script} with {len(tools_list)} tools.")
+    return server_script
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/mistral/key", methods=["GET", "POST"])
+def manage_mistral_key():
+    if request.method == "POST":
+        data = request.get_json() or {}
+        new_key = data.get("api_key", "").strip()
+        set_mistral_api_key(new_key)
+        return jsonify({"success": True, "has_key": bool(new_key)})
+    
+    current_key = get_mistral_api_key()
+    return jsonify({
+        "has_key": bool(current_key),
+        "masked_key": f"{current_key[:4]}...{current_key[-4:]}" if len(current_key) > 8 else ("Set" if current_key else "")
+    })
+
+
+@app.route("/api/gateway/key", methods=["GET", "POST"])
+def manage_gateway_key():
+    if request.method == "POST":
+        data = request.get_json() or {}
+        new_key = data.get("api_key", "").strip()
+        if not new_key:
+            return jsonify({"success": False, "error": "API Key cannot be empty"}), 400
+        saved_key = set_current_gateway_api_key(new_key)
+        return jsonify({"success": True, "api_key": saved_key})
+    
+    return jsonify({"api_key": get_current_gateway_api_key()})
+
+
+@app.route("/mcp/<server_id>", methods=["GET", "POST", "OPTIONS"])
+@app.route("/api/mcp/<server_id>", methods=["GET", "POST", "OPTIONS"])
+def mcp_gateway_endpoint(server_id: str):
+    """
+    Unified public MCP Gateway endpoint on active host.
+    Accepts JSON-RPC tool calls from curl, subagents, or IDEs with API Key security.
+    """
+    if request.method == "OPTIONS":
+        resp = app.make_default_options_response()
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return resp
+
+    # 1. Verify Gateway API Key
+    expected_key = get_current_gateway_api_key()
+    if expected_key:
+        auth_header = request.headers.get("Authorization", "").strip()
+        x_api_key = request.headers.get("X-API-Key", "").strip()
+        is_auth = False
+        if x_api_key == expected_key:
+            is_auth = True
+        elif auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1] == expected_key:
+                is_auth = True
+        if not is_auth:
+            return jsonify({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Unauthorized: Missing or invalid Gateway API Key. Provide header 'Authorization: Bearer <key>' or 'X-API-Key: <key>'."
+                }
+            }), 401
+
+    if request.method == "GET":
+        from gateway_manager import load_tool_module, get_allowed_tools_for_server
+        module = load_tool_module(server_id)
+        if module:
+            allowed = get_allowed_tools_for_server(server_id)
+            return jsonify({"target": server_id, "status": "active", "exposed_tools": allowed})
+        return jsonify({"error": f"MCP Server '{server_id}' not found."}), 404
+
+    # Normalize server alias (e.g. service_now -> servicenow, azure-devops -> azure_devops)
+    server_id_clean = server_id.replace("-", "_").lower()
+    if server_id_clean in ["service_now", "snow"]:
+        server_id = "servicenow"
+    else:
+        server_id = server_id_clean
+
+    data = request.get_json(silent=True)
+    if not data:
+        raw_text = request.get_data(as_text=True).strip()
+        if raw_text:
+            try:
+                import re, yaml, ast
+                fixed = re.sub(r'([{,\s])([a-zA-Z0-9_\-\.]+)\s*:', r'\1"\2":', raw_text)
+                fixed = re.sub(r':\s*([a-zA-Z0-9_\-\./]+)(\s*[,}])', r': "\1"\2', fixed)
+                data = json.loads(fixed)
+            except Exception:
+                try:
+                    data = yaml.safe_load(raw_text)
+                except Exception:
+                    try:
+                        data = ast.literal_eval(raw_text)
+                    except Exception:
+                        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    req_id = data.get("id", 1)
+    method = data.get("method", "")
+    params = data.get("params", {}) or {}
+
+    if method == "tools/list":
+        registry = load_server_registry()
+        server_info = registry.get("servers", {}).get(server_id, {})
+        tools = server_info.get("tools", [])
+        return jsonify({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"tools": tools}
+        })
+
+    tool_name = params.get("name") or data.get("tool") or data.get("name")
+    arguments = params.get("arguments", {}) or data.get("arguments", {}) or data.get("args", {})
+
+    if not tool_name:
+        return jsonify({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {"code": -32602, "message": "Missing tool name in params.name"}
+        }), 400
+
+    from gateway_manager import execute_tool_call
+    exec_res = execute_tool_call(server_id, tool_name, arguments)
+    return jsonify({
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "result": exec_res
+    })
+
+
+
+@app.route("/api/platforms", methods=["GET"])
+def list_platforms():
+    return jsonify(get_all_platforms())
+
+
+@app.route("/api/servers", methods=["GET"])
+def list_servers():
+    registry = load_server_registry()
+    return jsonify(registry)
+
+
+@app.route("/api/gateway/status", methods=["GET"])
+def gateway_status():
+    status = gateway_mgr.get_status()
+    return jsonify(status)
+
+
+def evaluate_server_health(platform_id: str, server_script: str, tools: list) -> dict:
+    """
+    Direct HTTP Pre-Flight Probe Test (Equivalent to running a single curl command):
+    Reads credentials from .env and executes a fast, direct HTTP request against upstream service.
+    """
+    server_dir = os.path.dirname(server_script)
+    env_file = os.path.join(server_dir, ".env")
+    creds = {}
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    creds[k.strip().lower()] = v.strip()
+
+    # Extract base URL, Auth, and Scopes dynamically from any field names
+    base_url = ""
+    token = ""
+    username = ""
+    org = ""
+    project = ""
+    instance = ""
+    tenant_id = ""
+    client_id = ""
+    client_secret = ""
+    subscription_id = ""
+    resource_group = ""
+
+    for k, v in creds.items():
+        k_lower = k.lower().strip()
+        if not v:
+            continue
+        if k_lower in ["tenant_id", "tenant", "azure_tenant_id", "azure_tenant"]:
+            tenant_id = v
+        elif k_lower in ["client_id", "app_id", "azure_client_id", "azure_app_id"]:
+            client_id = v
+        elif k_lower in ["client_secret", "app_secret", "azure_client_secret", "azure_app_secret"]:
+            client_secret = v
+        elif k_lower in ["subscription_id", "subscription", "sub_id", "azure_subscription_id"]:
+            subscription_id = v
+        elif k_lower in ["resource_group", "resourcegroup", "rg", "resource_group_name", "rg_name", "azure_resource_group"]:
+            resource_group = v
+        elif k_lower in ["organization_name", "organization", "org", "org_name", "owner", "account", "workspace"]:
+            org = v
+        elif k_lower in ["project_name", "project", "project_id", "project_key"]:
+            project = v
+        elif k_lower in ["instance", "instance_url", "subdomain", "snow_instance"]:
+            instance = v
+        elif any(w in k_lower for w in ["token", "pat", "password", "secret", "auth", "key"]):
+            token = v
+        elif any(w in k_lower for w in ["username", "user_id", "email"]):
+            username = v
+        elif any(w in k_lower for w in ["url", "host", "endpoint"]):
+            base_url = v
+
+    p_id_lower = platform_id.lower()
+
+    # 1. Azure DevOps Disambiguation (Must be checked before Azure Cloud ARM)
+    is_ado = any(x in p_id_lower for x in ["azure_devops", "azure-devops", "devops", "ado", "azuredevops", "vsts"]) or (org and (token or creds.get("personal_access_token") or creds.get("pat")))
+    
+    # 2. Azure Cloud ARM (App Service, VM, Infrastructure)
+    is_azure_arm = not is_ado and (any(x in p_id_lower for x in ["azure_app_service", "azure_appservice", "app_service", "appservice", "azure_vm", "azure_compute", "azure_iaas", "azure_cloud", "azure_arm"]) or ("azure" in p_id_lower and not any(d in p_id_lower for d in ["devops", "ado", "boards", "pipelines"])) or (tenant_id and client_id and (client_secret or token)))
+
+    if is_ado:
+        base_url = f"https://dev.azure.com/{org}" if org else "https://dev.azure.com"
+        probe_name = "list_projects"
+        probe_url = f"{base_url}/_apis/projects?api-version=7.1"
+        pat_val = token or creds.get("personal_access_token") or creds.get("pat") or creds.get("auth_val", "")
+        b64_val = base64.b64encode(f":{pat_val}".encode("utf-8")).decode("utf-8")
+        headers = {
+            "Authorization": f"Basic {b64_val}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "MCP-Gateway-PreFlight/1.0"
+        }
+        try:
+            with httpx.Client(verify=False, headers=headers, timeout=15.0) as client:
+                res = client.get(probe_url)
+                if res.status_code in [200, 201, 204]:
+                    val = res.json().get("value", [])
+                    item_names = [item.get("name") for item in val[:5]]
+                    return {
+                        "passed": True,
+                        "probe": probe_name,
+                        "preview": f"HTTP {res.status_code} OK: Found {len(val)} project(s) {item_names}"
+                    }
+                else:
+                    return {
+                        "passed": False,
+                        "probe": probe_name,
+                        "reason": f"Azure DevOps Error ({res.status_code}) at {probe_url}: {res.text[:300]}",
+                        "preview": res.text[:300]
+                    }
+        except Exception as e:
+            return {
+                "passed": False,
+                "probe": probe_name,
+                "reason": f"Azure DevOps Connection Error: {str(e)}",
+                "preview": str(e)
+            }
+
+    elif is_azure_arm:
+        secret_val = client_secret or token
+        headers = {"Accept": "application/json", "User-Agent": "MCP-Gateway-PreFlight/1.0"}
+        
+        # Authenticate with Microsoft identity platform
+        if tenant_id and client_id and secret_val:
+            try:
+                with httpx.Client(timeout=15.0) as t_client:
+                    t_res = t_client.post(
+                        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+                        data={
+                            "grant_type": "client_credentials",
+                            "client_id": client_id,
+                            "client_secret": secret_val,
+                            "scope": "https://management.azure.com/.default"
+                        }
+                    )
+                    if t_res.status_code == 200:
+                        access_token = t_res.json().get("access_token")
+                        headers["Authorization"] = f"Bearer {access_token}"
+                    else:
+                        return {
+                            "passed": False,
+                            "probe": "azure_oauth_token",
+                            "reason": f"Azure OAuth2 Error ({t_res.status_code}): {t_res.text[:300]}",
+                            "preview": t_res.text[:300]
+                        }
+            except Exception as e:
+                return {
+                    "passed": False,
+                    "probe": "azure_oauth_token",
+                    "reason": f"Azure OAuth2 Connection Error: {str(e)}",
+                    "preview": str(e)
+                }
+
+        # Choose appropriate ARM probe
+        if any(x in p_id_lower for x in ["app_service", "appservice", "web"]):
+            probe_name = "list_app_services"
+            probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites?api-version=2022-03-01"
+        elif any(x in p_id_lower for x in ["vm", "compute", "iaas"]):
+            probe_name = "list_vms"
+            probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines?api-version=2023-03-01"
+        else:
+            probe_name = "list_resource_groups"
+            probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups?api-version=2021-04-01"
+
+        try:
+            with httpx.Client(verify=False, headers=headers, timeout=15.0) as client:
+                res = client.get(probe_url)
+                if res.status_code in [200, 201, 204]:
+                    val = res.json().get("value", [])
+                    item_names = [item.get("name") for item in val[:5]]
+                    return {
+                        "passed": True,
+                        "probe": probe_name,
+                        "preview": f"HTTP {res.status_code} OK: Found {len(val)} resource(s) {item_names}"
+                    }
+                else:
+                    return {
+                        "passed": False,
+                        "probe": probe_name,
+                        "reason": f"Azure ARM API Error ({res.status_code}): {res.text[:300]}",
+                        "preview": res.text[:300]
+                    }
+        except Exception as e:
+            return {
+                "passed": False,
+                "probe": probe_name,
+                "reason": f"Azure Connection Error: {str(e)}",
+                "preview": str(e)
+            }
+
+    # 2. General Multi-Platform Probe Resolution
+    if not base_url or "api.service.com" in base_url:
+        if any(x in p_id_lower for x in ["azure_devops", "azure-devops", "devops", "ado"]):
+            base_url = f"https://dev.azure.com/{org}" if org else "https://dev.azure.com"
+        elif any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]):
+            inst = instance or org
+            base_url = f"https://{inst}.service-now.com" if inst and not inst.startswith("http") else (inst or "https://dev.service-now.com")
+        elif "github" in p_id_lower:
+            base_url = "https://api.github.com"
+        elif "gitlab" in p_id_lower:
+            base_url = "https://gitlab.com/api/v4"
+        elif "slack" in p_id_lower:
+            base_url = "https://slack.com/api"
+        elif any(x in p_id_lower for x in ["jira", "atlassian", "confluence"]):
+            site = instance or org
+            base_url = f"https://{site}.atlassian.net" if site and not site.startswith("http") else "https://atlassian.net"
+        else:
+            base_url = "https://api.service.com"
+
+    # Choose best probe endpoint from tools or fallback to root
+    endpoint = ""
+    probe_name = "health_probe"
+    
+    if any(x in p_id_lower for x in ["azure_devops", "azure-devops", "devops", "ado"]):
+        endpoint = "/_apis/projects?api-version=7.1"
+        probe_name = "list_projects"
+    else:
+        for t in (tools or []):
+            t_name = t.get("name", "")
+            t_ep = t.get("endpoint") or t.get("path") or ""
+            if any(k in t_name for k in ["list", "repo", "incident", "job", "health", "status", "get", "query"]) and t_ep:
+                endpoint = t_ep
+                probe_name = t_name
+                break
+
+        if not endpoint:
+            endpoint = (tools[0].get("endpoint") if tools else "") or "/status"
+
+    # Universal normalization
+    if endpoint.strip("/") in ["repos", "repositories"] and "github" in p_id_lower:
+        endpoint = "/user/repos"
+    
+    # Auto-substitute {org}, {owner}, {username}, {project} if in endpoint
+    if org:
+        endpoint = endpoint.replace("{org}", org).replace("{organization}", org).replace("{owner}", org).replace("{user}", org).replace("{username}", org).replace("{org_name}", org)
+    if project:
+        endpoint = endpoint.replace("{project}", project).replace("{project_name}", project).replace("{project_id}", project)
+    if username:
+        endpoint = endpoint.replace("{username}", username).replace("{user}", username)
+
+    # Handle UNIX domain sockets (e.g. Docker unix:///var/run/docker.sock)
+    if base_url.startswith("unix://") or "docker" in p_id_lower:
+        sock_path = base_url.replace("unix://", "").strip() or "/var/run/docker.sock"
+        if os.path.exists(sock_path):
+            try:
+                transport = httpx.HTTPTransport(uds=sock_path)
+                with httpx.Client(transport=transport, base_url="http://docker", timeout=8.0) as client:
+                    probe_ep = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+                    if not probe_ep or probe_ep == "/status":
+                        probe_ep = "/version"
+                    res = client.get(probe_ep)
+                    if res.status_code in [200, 201, 204]:
+                        return {
+                            "passed": True,
+                            "probe": probe_name,
+                            "preview": f"HTTP {res.status_code} OK (Docker Socket): {res.text[:300]}"
+                        }
+            except Exception:
+                pass
+        # Fallback to local docker CLI test
+        try:
+            d_proc = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5)
+            if d_proc.returncode == 0:
+                return {
+                    "passed": True,
+                    "probe": probe_name,
+                    "preview": "Docker Daemon Active (Verified via Docker CLI)"
+                }
+        except Exception:
+            pass
+
+    # Build full probe URL
+    if endpoint.startswith("http://") or endpoint.startswith("https://"):
+        probe_url = endpoint
+    else:
+        probe_url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+
+    # Build headers & auth
+    headers = {
+        "Accept": "application/json, application/vnd.github.v3+json, text/plain, */*",
+        "User-Agent": "MCP-Gateway-PreFlight/1.0"
+    }
+    auth = None
+
+    if any(x in p_id_lower for x in ["azure_devops", "azure-devops", "devops", "ado"]):
+        # Azure DevOps PAT requires Basic Auth (:{PAT})
+        pat_val = token or creds.get("personal_access_token") or creds.get("pat") or creds.get("auth_val", "")
+        if pat_val:
+            b64_val = base64.b64encode(f":{pat_val}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {b64_val}"
+            auth = ("", pat_val)
+    elif any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]):
+        u = username or creds.get("username") or creds.get("user")
+        p = token or creds.get("password") or creds.get("auth_val")
+        if u and p:
+            auth = (u, p)
+            b64_val = base64.b64encode(f"{u}:{p}".encode("utf-8")).decode("utf-8")
+            headers["Authorization"] = f"Basic {b64_val}"
+        elif p:
+            headers["Authorization"] = f"Bearer {p}"
+    elif username and token:
+        auth = (username, token)
+        b64_val = base64.b64encode(f"{username}:{token}".encode("utf-8")).decode("utf-8")
+        headers["Authorization"] = f"Basic {b64_val}"
+    elif token:
+        if any(prefix in token for prefix in ["Bearer ", "Basic ", "token ", "ApiKey "]):
+            headers["Authorization"] = token
+        else:
+            headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        with httpx.Client(verify=False, auth=auth, headers=headers, timeout=12.0, follow_redirects=True) as client:
+            res = client.get(probe_url)
+            status = res.status_code
+            text_preview = res.text[:400]
+
+            if status in [200, 201, 202, 204, 301, 302]:
+                return {
+                    "passed": True,
+                    "probe": probe_name,
+                    "preview": f"HTTP {status} OK: {text_preview}"
+                }
+            elif status == 401:
+                return {
+                    "passed": False,
+                    "probe": probe_name,
+                    "reason": "Authentication Failed (401): Upstream service rejected credentials/token.",
+                    "preview": text_preview
+                }
+            elif status == 403:
+                return {
+                    "passed": False,
+                    "probe": probe_name,
+                    "reason": "Permission Denied (403): Token/user lacks required permissions.",
+                    "preview": text_preview
+                }
+            elif status == 404:
+                # Smart generic fallback: If /orgs/<name> returned 404 because <name> is a User account, try /users/ or /user/repos
+                if "/orgs/" in probe_url:
+                    for alt_url in [probe_url.replace("/orgs/", "/users/"), f"{base_url.rstrip('/')}/user/repos"]:
+                        try:
+                            alt_res = client.get(alt_url)
+                            if alt_res.status_code in [200, 201, 202, 204]:
+                                return {
+                                    "passed": True,
+                                    "probe": probe_name,
+                                    "preview": f"HTTP {alt_res.status_code} OK (verified via user account): {alt_res.text[:300]}"
+                                }
+                        except Exception:
+                            pass
+
+                return {
+                    "passed": False,
+                    "probe": probe_name,
+                    "reason": f"Endpoint Not Found (404) at {probe_url}. Check instance URL or path.",
+                    "preview": text_preview
+                }
+            else:
+                return {
+                    "passed": False,
+                    "probe": probe_name,
+                    "reason": f"HTTP {status} Error from upstream API.",
+                    "preview": text_preview
+                }
+    except Exception as e:
+        return {
+            "passed": False,
+            "probe": probe_name,
+            "reason": f"Connection Error: {str(e)}",
+            "preview": str(e)
+        }
+
+
+@app.route("/api/servers/<platform_id>/evaluate", methods=["POST"])
+def evaluate_existing_server(platform_id: str):
+    registry = load_server_registry()
+    servers = registry.get("servers", {})
+    if platform_id not in servers:
+        return jsonify({"success": False, "error": f"Server {platform_id} not found"}), 404
+    
+    s = servers[platform_id]
+    server_script = os.path.join(SERVERS_DIR, platform_id, "server.py")
+    if not os.path.exists(server_script):
+        server_script = os.path.join(BASE_DIR, "mcp_servers", platform_id, "server.py")
+    tools = s.get("tools", [])
+    eval_result = evaluate_server_health(platform_id, server_script, tools)
+    return jsonify({"success": True, "evaluation": eval_result})
+
+
+@app.route("/api/build", methods=["POST"])
+def build_server():
+    payload = request.get_json() or {}
+    platform_id = payload.get("platform_id", "").lower().strip()
+    config_values = payload.get("config", {})
+    enabled_tools = payload.get("enabled_tools", None)
+    dynamic_tools = payload.get("tools", None)
+
+    spec = get_platform_spec(platform_id)
+    server_name = (spec.get("name") if spec else "") or config_values.get("custom_name", "").strip() or platform_id.replace("_", " ").title()
+    server_key = re.sub(r'[^a-zA-Z0-9_]', '_', platform_id or server_name.lower())
+    
+    # Smart URL & auth fallback
+    p_id_lower = (platform_id or server_key).lower()
+    org_val = config_values.get("organization_name") or config_values.get("organization") or config_values.get("org") or ""
+    inst_val = config_values.get("instance") or config_values.get("instance_name") or config_values.get("subdomain") or ""
+    
+    default_url = "https://api.service.com"
+    if any(x in p_id_lower for x in ["azure_devops", "azure-devops", "devops", "ado"]):
+        default_url = f"https://dev.azure.com/{org_val}" if org_val else "https://dev.azure.com"
+    elif any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]):
+        default_url = f"https://{inst_val}.service-now.com" if inst_val and not inst_val.startswith("http") else (inst_val or "https://dev.service-now.com")
+    elif any(x in p_id_lower for x in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
+        default_url = "https://management.azure.com"
+    elif "github" in p_id_lower:
+        default_url = "https://api.github.com"
+    elif "gitlab" in p_id_lower:
+        default_url = "https://gitlab.com/api/v4"
+    elif "slack" in p_id_lower:
+        default_url = "https://slack.com/api"
+
+    base_url = config_values.get("base_url") or config_values.get("instance_url") or config_values.get("jenkins_url") or default_url
+    auth_header = config_values.get("personal_access_token") or config_values.get("pat") or config_values.get("auth_header") or config_values.get("api_token") or config_values.get("token") or config_values.get("password") or config_values.get("client_secret") or config_values.get("jenkins_password", "")
+    
+    raw_tools = dynamic_tools or (spec.get("tools") if spec else []) or [
+        {"name": "query_endpoint", "description": f"Send dynamic GET request to {server_name}", "endpoint": "/status", "method": "GET"},
+        {"name": "post_endpoint", "description": f"Send dynamic POST payload to {server_name}", "endpoint": "/action", "method": "POST"}
+    ]
+    tools_list = sanitize_tool_parameters(raw_tools)
+
+    server_dir = os.path.join(SERVERS_DIR, server_key)
+    os.makedirs(server_dir, exist_ok=True)
+    server_script = os.path.join(server_dir, "server.py")
+
+    code = generate_dynamic_mcp_server_script(server_key, server_name, base_url, auth_header, tools_list)
+    with open(server_script, "w", encoding="utf-8") as f:
+        f.write(code)
+
+    write_server_env_file(server_key, config_values)
+
+    if enabled_tools is None:
+        enabled_tools = [t["name"] for t in tools_list]
+
+    filtered_tools = [t for t in tools_list if t["name"] in enabled_tools]
+
+    server_entry = {
+        "id": server_key,
+        "name": server_name,
+        "description": spec.get("description") if spec else f"Dynamically synthesized FastMCP Server for {server_name}",
+        "category": spec.get("category") if spec else "AI Synthesized Tool",
+        "transport": "stdio",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "all_tools": tools_list,
+        "enabled_tools": enabled_tools,
+        "tools": filtered_tools
+    }
+    platform_id = server_key
+
+    # Step: Run Self-Evaluation Pre-Flight Smoke Test before publishing
+    eval_result = evaluate_server_health(platform_id, server_script, filtered_tools)
+    server_entry["last_evaluation"] = eval_result
+
+    if not eval_result.get("passed", False):
+        # Do not activate broken server; report evaluation failure
+        return jsonify({
+            "success": False,
+            "evaluation_failed": True,
+            "error": eval_result.get("reason", "Pre-flight self-evaluation failed."),
+            "evaluation": eval_result,
+            "server": server_entry
+        }), 400
+
+    # Passed Self-Evaluation: Register in gateway
+    python_exec = sys.executable
+    gateway_mgr.add_target(
+        name=platform_id,
+        command=python_exec,
+        args=[server_script]
+    )
+
+    registry = load_server_registry()
+    servers = registry.get("servers", {})
+    servers[platform_id] = server_entry
+    registry["servers"] = servers
+    save_server_registry(registry)
+
+    gateway_res = gateway_mgr.restart_gateway()
+
+    return jsonify({
+        "success": True,
+        "server": server_entry,
+        "evaluation": eval_result,
+        "gateway": gateway_res
+    })
+
+
+@app.route("/api/servers/<platform_id>/tools", methods=["POST"])
+def update_server_tools(platform_id: str):
+    platform_id = platform_id.lower()
+    data = request.get_json() or {}
+    enabled_tools = data.get("enabled_tools", [])
+
+    registry = load_server_registry()
+    servers = registry.get("servers", {})
+    if platform_id not in servers:
+        return jsonify({"success": False, "error": f"Server {platform_id} not found"}), 404
+
+    s = servers[platform_id]
+    all_tools = s.get("all_tools") or s.get("tools", [])
+    s["all_tools"] = all_tools
+    s["enabled_tools"] = enabled_tools
+    s["tools"] = [t for t in all_tools if t["name"] in enabled_tools]
+
+    servers[platform_id] = s
+    registry["servers"] = servers
+    save_server_registry(registry)
+
+    # Regenerate server.py with active tools and restart gateway
+    ensure_server_script(platform_id, tools=s["tools"])
+    gateway_mgr.restart_gateway()
+
+    return jsonify({"success": True, "server": s})
+
+
+@app.route("/api/servers/<platform_id>", methods=["DELETE"])
+def delete_server(platform_id: str):
+    platform_id = platform_id.strip()
+    p_lower = platform_id.lower()
+    spec = get_platform_spec(p_lower)
+    service_name = f"mcp_{p_lower}"
+
+    gateway_mgr.remove_target(p_lower)
+    gateway_mgr.remove_target(platform_id)
+
+    # Remove persistent server files permanently
+    import shutil
+    for base_p in [SERVERS_DIR, os.path.join(BASE_DIR, "mcp_servers")]:
+        for candidate in [platform_id, p_lower]:
+            s_dir = os.path.join(base_p, candidate)
+            if os.path.exists(s_dir):
+                try:
+                    shutil.rmtree(s_dir, ignore_errors=True)
+                except Exception as e:
+                    logger.error(f"Error removing server directory {s_dir}: {e}")
+
+    if spec:
+        for field in spec.get("fields", []):
+            try:
+                keyring.delete_password(service_name, field["key"])
+            except Exception:
+                pass
+
+    registry = load_server_registry()
+    if "servers" in registry:
+        matched_keys = [k for k in registry["servers"] if k.lower() == p_lower or k == platform_id]
+        for mk in matched_keys:
+            del registry["servers"][mk]
+        save_server_registry(registry)
+
+    gateway_mgr.restart_gateway()
+    return jsonify({"success": True, "message": f"Server '{platform_id}' permanently deleted."})
+
+
+@app.route("/api/servers/<platform_id>/reload", methods=["POST"])
+def reload_server(platform_id: str):
+    res = gateway_mgr.restart_gateway()
+    return jsonify({"success": True, "gateway": res})
+
+
+def synthesize_custom_platform_suite(raw_name: str) -> dict:
+    """Fallback local generator if Mistral API key is not configured."""
+    cleaned_name = re.sub(r'(?i)\b(i\s+want\s+to\s+build\s+mcp\s+server\s+for|i\s+want\s+to\s+connect|i\s+want\s+mcp\s+for|connect|build|create|mcp|server|for|to|my|our|an|a|\s+)\b', ' ', raw_name).strip()
+    if not cleaned_name:
+        cleaned_name = "Custom Tool API"
+    else:
+        cleaned_name = cleaned_name.title()
+
+    server_id = re.sub(r'[^a-zA-Z0-9_]', '_', cleaned_name.lower())
+
+    tools = [
+        {"name": "get_status", "description": f"Check connectivity and health of {cleaned_name}.", "params": {}},
+        {"name": "get_system_info", "description": f"Retrieve system version, uptime, and cluster details for {cleaned_name}.", "params": {}},
+        {"name": "list_records", "description": f"List active items, resources, and records in {cleaned_name}.", "params": {"limit": "integer (default: 20)", "offset": "integer"}},
+        {"name": "get_record_details", "description": f"Retrieve detailed metadata for a specific record in {cleaned_name}.", "params": {"record_id": "string (required)"}},
+        {"name": "create_record", "description": f"Create or provision a new record in {cleaned_name}.", "params": {"payload": "object (required)"}},
+        {"name": "update_record", "description": f"Update an existing record in {cleaned_name}.", "params": {"record_id": "string", "payload": "object"}},
+        {"name": "delete_record", "description": f"Delete or archive a record in {cleaned_name}.", "params": {"record_id": "string (required)"}},
+        {"name": "search_records", "description": f"Execute search queries across {cleaned_name}.", "params": {"query": "string (required)"}},
+        {"name": "trigger_action", "description": f"Trigger automated execution, sync, or workflow in {cleaned_name}.", "params": {"action_name": "string", "params": "object"}},
+        {"name": "get_action_status", "description": f"Check status and execution log of a triggered task in {cleaned_name}.", "params": {"task_id": "string"}},
+        {"name": "list_events", "description": f"Fetch audit trail and event stream from {cleaned_name}.", "params": {"since": "string (ISO timestamp)"}},
+        {"name": "list_metrics", "description": f"Get performance metrics and telemetry from {cleaned_name}.", "params": {"metric_name": "string"}},
+        {"name": "query_endpoint", "description": f"Send dynamic GET request to any sub-path of {cleaned_name}.", "params": {"path": "string", "params": "object"}},
+        {"name": "post_endpoint", "description": f"Send dynamic POST payload to any sub-path of {cleaned_name}.", "params": {"path": "string", "body": "object"}}
+    ]
+
+    return {
+        "id": server_id,
+        "name": cleaned_name,
+        "category": "Enterprise Tooling & API",
+        "description": f"Universal FastMCP Server for {cleaned_name} with comprehensive CRUD, monitoring, and workflow automation suite.",
+        "icon": "zap",
+        "fields": [
+            {"key": "base_url", "label": "Server / API Base URL", "prompt": f"Enter the base URL for {cleaned_name} (e.g. https://{server_id}.company.internal):", "placeholder": f"https://api.{server_id}.internal", "default": "", "secret": False, "required": True},
+            {"key": "username", "label": "Username / Client ID", "prompt": f"Enter username, client ID, or service account:", "placeholder": "admin", "default": "", "secret": False, "required": False},
+            {"key": "api_token", "label": "API Token / Secret Key", "prompt": f"Enter API Token, Bearer Token, or Secret:", "placeholder": "••••••••••••", "default": "", "secret": True, "required": True}
+        ],
+        "tools": tools
+    }
+
+
+@app.route("/api/architect/chat", methods=["POST"])
+def interactive_architect_chat():
+    """
+    Multi-Turn Interactive MCP Architect with Persistent Memory:
+    - Retains conversation context per session_id.
+    - Deterministically seeds canonical suites for common tools.
+    - Dynamically modifies, adds, and removes tools based on user instructions.
+    - Explains parameters and architectures interactively.
+    """
+    data = request.get_json(silent=True) or {}
+    session_id = data.get("session_id")
+    message = (data.get("message") or "").strip()
+
+    if not message:
+        return jsonify({
+            "success": False,
+            "error": "Empty message provided."
+        }), 400
+
+    result = chat_with_mcp_architect(session_id, message)
+    return jsonify({
+        "success": True,
+        "session_id": result.get("session_id"),
+        "reply": result.get("reply"),
+        "spec": result.get("spec"),
+        "is_valid": result.get("is_valid", True)
+    })
+
+
+@app.route("/api/architect/reset", methods=["POST"])
+def interactive_architect_reset():
+    data = request.get_json(silent=True) or {}
+    session_id = data.get("session_id")
+    if session_id:
+        session_mgr.reset(session_id)
+    return jsonify({"success": True, "message": "Session reset successfully."})
+
+
+@app.route("/api/chat", methods=["POST"])
+def conversational_ai_architect():
+    """
+    Mistral AI-Powered Conversational Architect:
+    - Calls Mistral AI to dynamically synthesize schemas and tools.
+    - Handles user confirmations and credential collection.
+    """
+    data = request.get_json() or {}
+    message = (data.get("message") or "").strip()
+    history = data.get("history", [])
+    current_platform = data.get("current_platform", None)
+    collected_config = data.get("collected_config", {})
+    is_confirmed = data.get("is_confirmed", False)
+
+    if not message:
+        return jsonify({
+            "type": "text",
+            "response": "👋 Hello! Tell me the platform or service you want to build an MCP server for."
+        })
+
+    lower_msg = message.lower()
+
+    # 1. User says "Yes" / "Proceed" / "Build" to confirm discovery
+    if current_platform and (is_confirmed or any(w in lower_msg for w in ["yes", "proceed", "confirm", "build", "ok", "go ahead", "sure", "continue"])):
+        missing = [fld for fld in current_platform.get("fields", []) if fld["key"] not in collected_config or not collected_config[fld["key"]]]
+        if missing:
+            next_f = missing[0]
+            return jsonify({
+                "type": "field_prompt",
+                "collected_config": collected_config,
+                "platform": current_platform,
+                "field": next_f,
+                "response": f"Great! Let's connect **{current_platform.get('name')}**.\n\nPlease enter the **{next_f['label']}**:\n_{next_f.get('prompt') or 'Enter value:'}_"
+            })
+        else:
+            return jsonify({
+                "type": "ready_to_build",
+                "collected_config": collected_config,
+                "platform": current_platform,
+                "response": f"🎉 All credentials configured for **{current_platform.get('name')}**!\nClick below to generate the FastMCP server and save credentials into `mcp_servers/{current_platform.get('id')}/.env`."
+            })
+
+    # 2. Check if user is supplying credentials in text
+    if current_platform and not any(w in lower_msg for w in ["yes", "proceed", "confirm"]):
+        missing = [fld for fld in current_platform.get("fields", []) if fld["key"] not in collected_config or not collected_config[fld["key"]]]
+        if missing:
+            curr_field = missing[0]
+            collected_config[curr_field["key"]] = message
+            remaining = [fld for fld in current_platform.get("fields", []) if fld["key"] not in collected_config or not collected_config[fld["key"]]]
+            if remaining:
+                next_f = remaining[0]
+                return jsonify({
+                    "type": "field_prompt",
+                    "collected_config": collected_config,
+                    "platform": current_platform,
+                    "field": next_f,
+                    "response": f"✅ Recorded **{curr_field['label']}**.\n\nPlease enter **{next_f['label']}**:\n_{next_f.get('prompt') or 'Enter value:'}_"
+                })
+            else:
+                return jsonify({
+                    "type": "ready_to_build",
+                    "collected_config": collected_config,
+                    "platform": current_platform,
+                    "response": f"🎉 All credentials configured for **{current_platform.get('name')}**!\nYou have **{len(current_platform.get('tools', []))} tools** ready to expose. Click below to generate the FastMCP server and save credentials into `mcp_servers/{current_platform.get('id')}/.env`."
+                })
+
+    # 3. Live Mistral AI LLM Synthesis (if API Key is configured)
+    mistral_key = get_mistral_api_key()
+    if mistral_key:
+        try:
+            logger.info(f"Calling Mistral AI to synthesize spec for '{message}'...")
+            mistral_spec = call_mistral_mcp_architect(message, history)
+            if mistral_spec:
+                # If Mistral detects that this is NOT a valid platform / random gibberish:
+                if not mistral_spec.get("is_valid", True) or not mistral_spec.get("tools"):
+                    return jsonify({
+                        "type": "error",
+                        "response": mistral_spec.get("response") or f"❌ I could not recognize '**{message}**' as a known software, developer tool, or API.\n\nPlease specify a valid platform (e.g. *Jenkins*, *GitHub*, *ServiceNow*, *AWS S3*, *Terraform*, *Jira*, *PostgreSQL*) or provide its API endpoints."
+                    })
+
+                platform_obj = {
+                    "id": mistral_spec.get("platform_id") or re.sub(r'[^a-zA-Z0-9_]', '_', mistral_spec.get("platform_name", "custom").lower()),
+                    "name": mistral_spec.get("platform_name", "Custom Service"),
+                    "category": mistral_spec.get("category", "Custom Service"),
+                    "description": mistral_spec.get("description", ""),
+                    "fields": mistral_spec.get("fields", [
+                        {"key": "base_url", "label": "Base URL", "placeholder": "https://api.service.com", "secret": False, "required": True},
+                        {"key": "api_token", "label": "API Token / Key", "placeholder": "••••••••••••", "secret": True, "required": True}
+                    ]),
+                    "tools": mistral_spec.get("tools", [])
+                }
+                return jsonify({
+                    "type": "discovery_confirmation",
+                    "source": "mistral_ai",
+                    "platform": platform_obj,
+                    "response": mistral_spec.get("response") or f"🤖 **Mistral AI** dynamically formulated the comprehensive specification for **{platform_obj['name']}** with **{len(platform_obj['tools'])} tools**!\n\nPlease review the available tools below and click **Proceed to Build**."
+                })
+        except Exception as e:
+            logger.error(f"Mistral AI call failed, falling back to local resolver: {e}")
+
+    # 4. Fallback to Local Platform Registry & Sub-Service Scoping
+    matched_spec = find_platform_by_query(message)
+    if matched_spec:
+        return jsonify({
+            "type": "discovery_confirmation",
+            "source": "local_registry",
+            "platform": matched_spec,
+            "response": f"🔍 I discovered the comprehensive enterprise specification for **{matched_spec['name']}** with **{len(matched_spec['tools'])} tools**!\n\nPlease review the available tools below. Click **Proceed to Build** to configure credentials and generate the server."
+        })
+
+    # 5. Unknown Platform - Ask for valid tool name rather than hallucinating fake tools
+    return jsonify({
+        "type": "error",
+        "response": f"❓ I could not identify '**{message}**' as a recognized software, platform, or API service.\n\nPlease enter a valid tool or platform name (e.g. *AWS S3 alone*, *Jenkins*, *GitHub*, *ServiceNow*, *Terraform*, *PostgreSQL*, *Jira*, *Datadog*)."
+    })
+
+
+@app.route("/api/chat/tester", methods=["POST"])
+def agent_chat_tester():
+    data = request.get_json() or {}
+    message = data.get("message", "").strip()
+    history = data.get("history", [])
+
+    if not message:
+        return jsonify({"type": "message", "reply": "Please type a message or instruction."}), 400
+
+    try:
+        registry = load_server_registry()
+        servers = registry.get("servers", {})
+        gateway_key = get_current_gateway_api_key()
+
+        result = chat_with_mcp_agent(
+            user_message=message,
+            history=history,
+            servers=servers,
+            gateway_url="http://localhost:5001",
+            gateway_key=gateway_key
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in agent_chat_tester: {e}")
+        return jsonify({"type": "message", "reply": f"⚠️ Agent chat error: {str(e)}"}), 200
+
+
+# ==============================================================================
+# Autonomous DevOps Bots Dashboard Endpoints
+# ==============================================================================
+
+@app.route("/api/bots", methods=["GET"])
+def get_all_bots():
+    """Retrieve all configured autonomous bots and their metadata."""
+    return jsonify(bot_registry.load_all())
+
+
+@app.route("/api/bots", methods=["POST"])
+def save_bot():
+    """Create or update a bot."""
+    data = request.get_json() or {}
+    if not data.get("name") or not data.get("instructions"):
+        return jsonify({"error": "Bot name and instructions are required"}), 400
+    saved = bot_registry.create_or_update_bot(data)
+    return jsonify({"success": True, "bot": saved})
+
+
+@app.route("/api/bots/chat_architect", methods=["POST"])
+def bot_architect_chat():
+    """Multi-turn conversational bot architect with intent understanding and capability validation."""
+    data = request.get_json() or {}
+    message = data.get("message", "").strip()
+    history = data.get("history", [])
+
+    if not message:
+        return jsonify({"status": "clarification_needed", "reply": "Please describe what DevOps bot you want to build."}), 400
+
+    registry = load_server_registry()
+    servers = registry.get("servers", {})
+
+    result = chat_with_bot_architect(user_message=message, history=history, servers=servers)
+    if result.get("blueprint"):
+        return jsonify(result)
+
+    # Automatic Synthesis Fallback if LLM provider hits rate limit or error
+    msg_l = (message + " " + " ".join([h.get("content", "") for h in history])).lower()
+    app_name = "devops-vsp-sample-app-shakil" if ("devops-vsp-sample-app" in msg_l or "springboot" in msg_l or "spring" in msg_l) else ("ai-mcp-platform-shakil" if "ai-mcp" in msg_l else "devops-vsp-sample-app-shakil")
+    desc = "Spring App Error" if "spring" in msg_l else "Application Incident"
+    repo = "springboot-app" if "springboot" in msg_l else "AI-POC"
+
+    servers_used = []
+    tools_mapped = []
+    if "azure_app_service" in servers:
+        servers_used.append("azure_app_service")
+        tools_mapped.extend(["azure_app_service.get_app_service_logs", "azure_app_service.restart_app_service"])
+    if "servicenow" in servers:
+        servers_used.append("servicenow")
+        tools_mapped.extend(["servicenow.query_incidents", "servicenow.create_incident", "servicenow.add_work_note", "servicenow.resolve_incident"])
+    if "azure_devops" in servers:
+        servers_used.append("azure_devops")
+        tools_mapped.extend(["azure_devops.get_file_content", "azure_devops.list_builds"])
+
+    import time
+    bot_id = f"auto_workflow_bot_{int(time.time())}"
+    blueprint = {
+        "id": bot_id,
+        "name": "Spring Boot Autonomous Bot",
+        "description": f"Monitors {app_name}, deduplicates ServiceNow incidents, extracts error traces, inspects ADO codebase, and performs AI RCA.",
+        "trigger_type": "interval",
+        "interval_seconds": 300,
+        "schedule": {
+            "type": "interval",
+            "interval_minutes": 5,
+            "interval_seconds": 300
+        },
+        "status": "active",
+        "instructions": message,
+        "tools_required": servers_used,
+        "context_config": {
+            "container_name": app_name,
+            "ado_repo": repo,
+            "ado_branch": "main",
+            "ado_pipeline": "AI-POC-CI-CD",
+            "servicenow_short_description": desc
+        },
+        "workflow_steps": [
+            {"step": 1, "action": f"Query ServiceNow for open tickets with Short Description '{desc}'", "server": "servicenow", "tool": "query_incidents"},
+            {"step": 2, "action": f"Fetch latest logs from App Service '{app_name}' and strip error trace", "server": "azure_app_service", "tool": "get_app_service_logs"},
+            {"step": 3, "action": f"Create ServiceNow Incident '{desc}' if no duplicate exists", "server": "servicenow", "tool": "create_incident"},
+            {"step": 4, "action": "Attach raw Error Snippet alone to Ticket Work Notes", "server": "servicenow", "tool": "add_work_note"},
+            {"step": 5, "action": "Add Work Note: '🤖 AI Bot is looking into the issue'", "server": "servicenow", "tool": "add_work_note"},
+            {"step": 6, "action": f"Inspect ADO repo '{repo}' (main branch) and check recent pipeline builds", "server": "azure_devops", "tool": "get_file_content"},
+            {"step": 7, "action": "Execute AI RCA and update Ticket with complete detailed RCA report", "server": "servicenow", "tool": "add_work_note"},
+            {"step": 8, "action": "Resolve / Close Ticket in ServiceNow (State: 6)", "server": "servicenow", "tool": "resolve_incident"}
+        ],
+        "workflow_code": f"""# Auto-Synthesized Autonomous Bot
+from bot_engine import fetch_azure_appservice_logs, extract_stripped_error_log, generate_ai_rca, execute_mcp_tool_on_gateway
+
+def execute_workflow(ctx):
+    app_name = ctx.get("container_name", "{app_name}")
+    desc = ctx.get("servicenow_short_description", "{desc}")
+    repo = ctx.get("ado_repo", "{repo}")
+
+    # 1. Duplicate check
+    q_res = execute_mcp_tool_on_gateway("servicenow", "query_incidents", {{"short_description": desc}})
+    active_incidents = [inc for inc in q_res.get("raw", {{}}).get("result", []) if str(inc.get("state")) not in ["6", "7", "8"]]
+    if active_incidents:
+        return {{"status": "skipped", "message": f"Active ticket already exists: {{active_incidents[0].get('number')}}"}}
+
+    # 2. Fetch logs & strip error
+    logs = fetch_azure_appservice_logs(app_name)
+    err = extract_stripped_error_log(logs)
+
+    # 3. Create Ticket
+    cr_res = execute_mcp_tool_on_gateway("servicenow", "create_incident", {{"short_description": desc, "category": "Software"}})
+    inc_data = cr_res.get("raw", {{}}).get("result", {{}})
+    inc_id = inc_data.get("sys_id") or inc_data.get("number")
+
+    # 4. Attach Error Snippet
+    execute_mcp_tool_on_gateway("servicenow", "add_work_note", {{"incident_id": inc_id, "work_notes": f"Error Snippet:\\n{{err[:1000]}}"}})
+
+    # 5. AI Bot Work Note
+    execute_mcp_tool_on_gateway("servicenow", "add_work_note", {{"incident_id": inc_id, "work_notes": "🤖 AI Bot is looking into the issue."}})
+
+    # 6. ADO Code & Pipeline Inspection
+    ado_res = execute_mcp_tool_on_gateway("azure_devops", "list_builds", {{"project": "AI-POC"}})
+
+    # 7. Complete RCA
+    rca = generate_ai_rca(err, app_name, app_context=f"ADO Repo: {{repo}} (main branch)")
+    execute_mcp_tool_on_gateway("servicenow", "add_work_note", {{"incident_id": inc_id, "work_notes": rca.get("formatted_rca_markdown", "")}})
+
+    # 8. Close ticket
+    execute_mcp_tool_on_gateway("servicenow", "resolve_incident", {{"incident_id": inc_id, "state": "6"}})
+
+    return {{"status": "success", "incident": inc_id, "rca": rca}}
+"""
+    }
+
+    return jsonify({
+        "status": "ready",
+        "reply": f"🤖 **Synthesized Autonomous Bot Blueprint successfully!**\n\n* **Target App**: `{app_name}`\n* **ServiceNow Trigger**: `{desc}`\n* **ADO Repo**: `{repo}`\n* **Tools Mapped**: {len(tools_mapped)} tools validated across `{', '.join(servers_used)}`.\n\nClick **Deploy Autonomous Bot** to save and activate this workflow.",
+        "validation": {
+            "supported": True,
+            "servers_used": servers_used,
+            "tools_mapped": tools_mapped,
+            "missing_servers": []
+        },
+        "blueprint": blueprint
+    })
+
+
+@app.route("/api/bots/synthesize", methods=["POST"])
+def synthesize_bot():
+    """Use Mistral AI to architect a bot from natural language."""
+    data = request.get_json() or {}
+    prompt = data.get("prompt", "").strip()
+    if not prompt:
+        return jsonify({"error": "Prompt is required"}), 400
+    registry = load_server_registry()
+    servers = registry.get("servers", {})
+    bot_spec = synthesize_bot_with_mistral(prompt, servers)
+    return jsonify(bot_spec)
+
+
+@app.route("/api/bots/<bot_id>/run", methods=["POST"])
+def trigger_bot_run(bot_id):
+    """Trigger an immediate execution of an autonomous bot workflow."""
+    result = run_bot_workflow(bot_id, trigger_reason="Manual Web Studio Trigger")
+    return jsonify(result)
+
+
+@app.route("/api/bots/<bot_id>/toggle", methods=["POST"])
+def toggle_bot_status(bot_id):
+    """Toggle bot active/inactive state."""
+    new_status = bot_registry.toggle_status(bot_id)
+    if new_status is None:
+        return jsonify({"error": "Bot not found"}), 404
+    return jsonify({"success": True, "status": new_status})
+
+
+@app.route("/api/bots/<bot_id>", methods=["DELETE"])
+def delete_bot(bot_id):
+    """Delete a bot from the registry."""
+    success = bot_registry.delete_bot(bot_id)
+    if not success:
+        return jsonify({"error": "Bot not found"}), 404
+    return jsonify({"success": True})
+
+
+@app.route("/api/bots/<bot_id>/logs", methods=["GET"])
+def get_bot_logs(bot_id):
+    """Retrieve execution history and RCA logs for a bot."""
+    bot = bot_registry.get_bot(bot_id)
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+    return jsonify({
+        "bot_id": bot_id,
+        "name": bot.get("name"),
+        "run_count": bot.get("run_count", 0),
+        "last_run": bot.get("last_run"),
+        "run_history": bot.get("run_history", [])
+    })
+
+
+@app.route("/api/bots/<bot_id>/clear_logs", methods=["POST", "DELETE"])
+@app.route("/api/bots/<bot_id>/logs", methods=["DELETE"])
+def clear_bot_logs(bot_id):
+    """Purges all execution telemetry, run history, and RCA records for a bot."""
+    bot = bot_registry.get_bot(bot_id)
+    if not bot:
+        return jsonify({"error": "Bot not found"}), 404
+    success = bot_registry.clear_logs(bot_id)
+    return jsonify({"success": success, "bot_id": bot_id, "message": "BOT Log cleared successfully."})
+
+
+@app.route("/api/bots/<bot_id>/start_daemon", methods=["POST"])
+def start_bot_daemon(bot_id):
+    """Start background continuous monitoring loop or calendar schedule for a bot."""
+    data = request.get_json() or {}
+    interval = int(data.get("interval_seconds")) if data.get("interval_seconds") is not None else None
+    schedule = data.get("schedule")
+    success = daemon_manager.start(bot_id, interval_seconds=interval, schedule=schedule)
+    return jsonify({"success": success, "is_running": True, "interval_seconds": interval, "schedule": schedule})
+
+
+@app.route("/api/bots/<bot_id>/stop_daemon", methods=["POST"])
+def stop_bot_daemon(bot_id):
+    """Stop background continuous monitoring loop for a bot."""
+    success = daemon_manager.stop(bot_id)
+    return jsonify({"success": success, "is_running": False})
+
+
+@app.route("/api/bots/<bot_id>/daemon_status", methods=["GET"])
+def get_bot_daemon_status(bot_id):
+    """Get active daemon status for a bot."""
+    is_running = daemon_manager.is_running(bot_id)
+    return jsonify({"bot_id": bot_id, "is_running": is_running})
+
+
+# ==========================================
+# Universal Model-Agnostic LLM API Routes
+# ==========================================
+
+@app.route("/api/llm/presets", methods=["GET"])
+def get_llm_presets():
+    """Retrieve all available provider presets (Groq, OpenAI, Azure OpenAI, Mistral, Ollama, Gemini, etc.)."""
+    return jsonify({"presets": PROVIDER_PRESETS, "active_config": llm_client.config})
+
+
+@app.route("/api/llm/config", methods=["GET"])
+def get_llm_config():
+    """Retrieve current active LLM configuration."""
+    return jsonify(llm_client.config)
+
+
+@app.route("/api/llm/config", methods=["POST"])
+def update_llm_config():
+    """Update active LLM configuration dynamically (provider, endpoint, key, model)."""
+    try:
+        data = request.get_json() or {}
+        success, msg = llm_client.save_config(data)
+        if success:
+            return jsonify({"status": "success", "message": msg, "config": llm_client.config})
+        return jsonify({"status": "error", "message": msg}), 400
+    except Exception as e:
+        logger.error(f"Error saving LLM config: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route("/api/llm/test", methods=["POST"])
+def test_llm_connection():
+    """Diagnostic ping test for active or provided LLM credentials."""
+    try:
+        data = request.get_json() or {}
+        if data:
+            temp_client = UniversalLLMClient()
+            if not data.get("api_key") or str(data.get("api_key", "")).startswith("•"):
+                data["api_key"] = llm_client.config.get("api_key", "")
+            temp_client.config.update(data)
+            res = temp_client.test_connection()
+        else:
+            res = llm_client.test_connection()
+        return jsonify(res)
+    except Exception as e:
+        logger.error(f"Error in test_llm_connection: {e}")
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "latency_ms": 0
+        }), 200
+
+
+
+# ==========================================
+# AIOps ServiceNow & Mistral RBA API Routes
+# ==========================================
+
+import importlib
+try:
+    aiops_module = importlib.import_module("aiops-snow")
+    import sys
+    sys.modules["aiops_snow"] = aiops_module
+except Exception as _e_aiops:
+    logger.warning(f"Could not load aiops-snow module: {_e_aiops}")
+    aiops_module = None
+
+
+@app.route("/api/aiops/catalogs", methods=["GET"])
+def get_aiops_catalogs():
+    """Retrieve all AIOps SOP Service Catalog items registered in ServiceNow."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        catalogs = aiops_module.list_catalogs()
+        return jsonify({"catalogs": catalogs, "count": len(catalogs)})
+    except Exception as e:
+        logger.error(f"Error fetching AIOps catalogs: {e}")
+        return jsonify({"error": str(e), "catalogs": []}), 500
+
+
+@app.route("/api/aiops/catalogs", methods=["POST"])
+def create_aiops_catalog():
+    """Create a new SOP-driven Service Catalog item in ServiceNow with dynamic variables."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        data = request.get_json() or {}
+        short_name = data.get("short_name") or data.get("name")
+        if not short_name:
+            return jsonify({"error": "Catalog short_name is required"}), 400
+
+        res = aiops_module.create_catalog(
+            short_name=short_name,
+            short_description=data.get("short_description", ""),
+            sop_markdown=data.get("sop_markdown", ""),
+            fields=data.get("fields", []),
+            approval_required=bool(data.get("approval_required")),
+            approver_sys_id=data.get("approver_sys_id", ""),
+            approver_name=data.get("approver_name", ""),
+            category_name=data.get("category_name", "AIOps Runbooks")
+        )
+        return jsonify({"status": "success", "catalog": res})
+    except Exception as e:
+        logger.error(f"Error creating AIOps catalog: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/aiops/catalogs/<sys_id>", methods=["DELETE"])
+def delete_aiops_catalog(sys_id):
+    """Delete an AIOps Service Catalog item and its variables/attachments in ServiceNow."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        aiops_module.delete_catalog(sys_id)
+        return jsonify({"status": "success", "message": f"Catalog '{sys_id}' deleted."})
+    except Exception as e:
+        logger.error(f"Error deleting AIOps catalog '{sys_id}': {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/aiops/users", methods=["GET"])
+def get_aiops_users():
+    """Search active sys_user records in ServiceNow for approver selection."""
+    if not aiops_module:
+        return jsonify({"users": []})
+    try:
+        term = request.args.get("q", "")
+        users = aiops_module.search_users(term=term, limit=100)
+        return jsonify({"users": users})
+    except Exception as e:
+        logger.error(f"Error searching ServiceNow users: {e}")
+        return jsonify({"error": str(e), "users": []}), 500
+
+
+@app.route("/api/aiops/orders", methods=["GET"])
+def get_aiops_orders():
+    """Query recent requested items (RITMs) raised for AIOps catalogs in ServiceNow."""
+    if not aiops_module:
+        return jsonify({"orders": []})
+    try:
+        cat_id = request.args.get("cat_item") or request.args.get("catalog_id")
+        limit = int(request.args.get("limit", 50))
+        orders = aiops_module.list_orders(cat_item_sys_id=cat_id, limit=limit)
+        return jsonify({"orders": orders, "count": len(orders)})
+    except Exception as e:
+        logger.error(f"Error listing AIOps orders: {e}")
+        return jsonify({"error": str(e), "orders": []}), 500
+
+
+@app.route("/api/aiops/orders/<ritm_id>/execute", methods=["POST"])
+def execute_aiops_order(ritm_id):
+    """Trigger immediate Mistral Autonomous execution on a specific ServiceNow RITM."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        res = aiops_module.execute_order_with_mistral(ritm_id)
+        return jsonify(res)
+    except Exception as e:
+        logger.error(f"Error executing AIOps order '{ritm_id}' with Mistral: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/aiops/engine/status", methods=["GET"])
+def get_aiops_engine_status():
+    """Retrieve AIOps polling engine status and live execution log buffer."""
+    if not aiops_module:
+        return jsonify({"is_running": False, "poll_interval": 30, "logs": []})
+    try:
+        daemon = getattr(aiops_module, "aiops_daemon", None) or getattr(aiops_module, "aiops_engine", None)
+        from aiops_snow.aiops_engine import LOG_BUFFER as lb
+        logs_list = list(lb) if lb else []
+        is_running = daemon.is_running() if daemon and hasattr(daemon, 'is_running') else False
+        poll_int = daemon.poll_interval if daemon and hasattr(daemon, 'poll_interval') else 30
+        return jsonify({
+            "is_running": is_running,
+            "poll_interval": poll_int,
+            "logs": logs_list
+        })
+    except Exception as e:
+        logger.error(f"Error getting AIOps engine status: {e}")
+        return jsonify({"is_running": False, "poll_interval": 30, "logs": [], "error": str(e)})
+
+
+@app.route("/api/aiops/engine/start", methods=["POST"])
+def start_aiops_engine():
+    """Start the background AIOps polling daemon loop."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        data = request.get_json() or {}
+        interval = int(data.get("interval", 30))
+        daemon = getattr(aiops_module, "aiops_daemon", None) or getattr(aiops_module, "aiops_engine", None)
+        if daemon:
+            daemon.start(poll_interval=interval)
+        return jsonify({"status": "success", "is_running": True, "poll_interval": interval})
+    except Exception as e:
+        logger.error(f"Error starting AIOps engine: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/aiops/engine/stop", methods=["POST"])
+def stop_aiops_engine():
+    """Stop the background AIOps polling daemon loop."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        daemon = getattr(aiops_module, "aiops_daemon", None) or getattr(aiops_module, "aiops_engine", None)
+        if daemon:
+            daemon.stop()
+        return jsonify({"status": "success", "is_running": False})
+    except Exception as e:
+        logger.error(f"Error stopping AIOps engine: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/aiops/engine/run_once", methods=["POST"])
+def run_once_aiops_engine():
+    """Trigger a single polling and execution pass."""
+    if not aiops_module:
+        return jsonify({"error": "AIOps module not initialized"}), 500
+    try:
+        daemon = getattr(aiops_module, "aiops_daemon", None) or getattr(aiops_module, "aiops_engine", None)
+        if daemon and hasattr(daemon, 'poll_once'):
+            res = daemon.poll_once()
+        else:
+            from aiops_snow.aiops_engine import aiops_engine as eng_inst
+            res = eng_inst.poll_once()
+        return jsonify(res)
+    except Exception as e:
+        logger.error(f"Error running single AIOps pass: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/aiops/engine/clear_logs", methods=["POST", "DELETE"])
+def clear_aiops_engine_logs():
+    """Clear the live execution log buffer."""
+    if not aiops_module:
+        return jsonify({"status": "success"})
+    try:
+        daemon = getattr(aiops_module, "aiops_daemon", None) or getattr(aiops_module, "aiops_engine", None)
+        if daemon and hasattr(daemon, 'clear_logs'):
+            daemon.clear_logs()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def main():
+    host = os.environ.get("FLASK_HOST", "0.0.0.0")
+    port = int(os.environ.get("FLASK_PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() in ["true", "1"]
+
+    logger.info(f"Starting AI MCP Server Kit Web App on http://{host}:{port}")
+    gateway_mgr.start_gateway()
+    app.run(host=host, port=port, debug=debug, use_reloader=False)
+
+
+if __name__ == "__main__":
+    main()
+
