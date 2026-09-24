@@ -265,10 +265,11 @@ def get_credentials() -> Dict[str, str]:
             creds["instance"] = v_str
             creds["instance_name"] = v_str
             if "service-now.com" in v_str:
-                creds["base_url"] = v_str
-        elif k_upper in ["PERSONAL_ACCESS_TOKEN", "PAT", "API_TOKEN", "TOKEN", "SECRET", "PASSWORD", "AUTH", "AUTH_HEADER", "API_KEY"]:
+        elif k_upper in ["PERSONAL_ACCESS_TOKEN", "PAT", "API_TOKEN", "TOKEN", "SECRET", "PASSWORD", "AUTH", "AUTH_HEADER", "API_KEY", "GITHUB_TOKEN", "GITHUB_PAT", "GH_TOKEN", "GH_PAT", "ACCESS_TOKEN"]:
             creds["auth_val"] = v_str
-        elif k_upper in ["USERNAME", "USER_ID", "EMAIL", "USER"]:
+            creds["token"] = v_str
+            creds["pat"] = v_str
+        elif k_upper in ["USERNAME", "USER_ID", "EMAIL", "USER", "LOGIN"]:
             creds["username"] = v_str
         elif k_upper in ["BASE_URL", "URL", "HOST", "ENDPOINT"]:
             creds["base_url"] = v_str
@@ -314,16 +315,23 @@ def get_headers_and_auth(creds: Dict[str, str]):
     }}
     auth = None
     u = creds.get("username")
-    p = creds.get("auth_val")
+    p = creds.get("auth_val") or creds.get("token") or creds.get("pat") or ""
     srv_lower = "{server_id}".lower()
 
-    # 1. Azure DevOps PAT Basic Auth
-    if any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"]):
+    # 1. GitHub Token Auth (Strict Bearer Token, never Basic Auth)
+    if "github" in srv_lower:
+        pat_val = p or creds.get("token") or creds.get("pat") or creds.get("api_token") or creds.get("personal_access_token") or ""
+        if pat_val:
+            headers["Authorization"] = f"Bearer {{pat_val}}"
+        headers["X-GitHub-Api-Version"] = "2022-11-28"
+        auth = None
+    # 2. Azure DevOps PAT Basic Auth
+    elif any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"]):
         if p:
             b64_val = base64.b64encode(f":{{p}}".encode("utf-8")).decode("utf-8")
             headers["Authorization"] = f"Basic {{b64_val}}"
             auth = ("", p)
-    # 2. Azure OAuth2 Client Credentials
+    # 3. Azure OAuth2 Client Credentials
     elif any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
         tenant = creds.get("tenant_id") or creds.get("azure_tenant_id") or ""
         client_id = creds.get("client_id") or creds.get("azure_client_id") or ""
@@ -355,7 +363,7 @@ def get_headers_and_auth(creds: Dict[str, str]):
                     headers["Authorization"] = f"Bearer {{p}}"
         elif p:
             headers["Authorization"] = f"Bearer {{p}}"
-    # 3. ServiceNow Basic Auth
+    # 4. ServiceNow Basic Auth
     elif any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
         if u and p:
             auth = (u, p)
@@ -363,7 +371,7 @@ def get_headers_and_auth(creds: Dict[str, str]):
             headers["Authorization"] = f"Basic {{b64_val}}"
         elif p:
             headers["Authorization"] = f"Bearer {{p}}"
-    # 4. Standard Basic Auth or Bearer Token
+    # 5. Standard Basic Auth or Bearer Token
     elif u and p:
         auth = (u, p)
         try:
@@ -501,6 +509,17 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
             if any(sub in target_endpoint for sub in ["/_apis/git", "/_apis/pipelines", "/_apis/build", "/_apis/wit", "/_apis/work", "/_apis/release"]):
                 target_endpoint = target_endpoint.replace("/_apis/", f"/{{proj_val}}/_apis/")
 
+    # GitHub smart endpoint routing
+    if "github" in srv_lower:
+        if target_endpoint.strip("/") in ["repos", "repositories", "user/repos", "my/repos", "list_repositories"]:
+            target_endpoint = "/user/repos"
+        owner_val = args.get("owner") or args.get("user") or args.get("username") or args.get("org") or creds.get("username") or creds.get("org") or ""
+        repo_val = args.get("repo") or args.get("repository") or args.get("repo_name") or ""
+        if owner_val:
+            target_endpoint = re.sub(r'\\{{(?:owner|user|username|org)\\}}', lambda m: str(owner_val), target_endpoint, flags=re.IGNORECASE)
+        if repo_val:
+            target_endpoint = re.sub(r'\\{{(?:repo|repository|repo_name)\\}}', lambda m: str(repo_val), target_endpoint, flags=re.IGNORECASE)
+
     if target_endpoint.startswith("http://") or target_endpoint.startswith("https://"):
         url = target_endpoint
     else:
@@ -518,7 +537,8 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         "subscription_id", "subscriptionId", "sub_id", "subscription",
         "app_name", "appName", "site_name", "siteName", "webapp_name", "web_app",
         "project", "projectName", "projectId", "project_id",
-        "repo", "repository", "repositoryId", "repository_id",
+        "repo", "repository", "repositoryId", "repository_id", "repo_name",
+        "owner", "user", "username", "org", "organization",
         "pipelineId", "pipeline_id", "buildId", "build_id", "groupId", "group_id",
         "pullRequestId", "pull_request_id", "incident_id", "sys_id", "number"
     ]
@@ -1027,6 +1047,12 @@ def evaluate_server_health(platform_id: str, server_script: str, tools: list) ->
             headers["Authorization"] = f"Basic {b64_val}"
         elif p:
             headers["Authorization"] = f"Bearer {p}"
+    elif "github" in p_id_lower:
+        p = token or creds.get("personal_access_token") or creds.get("pat") or creds.get("token") or creds.get("auth_val", "")
+        if p:
+            headers["Authorization"] = f"Bearer {p}"
+        headers["X-GitHub-Api-Version"] = "2022-11-28"
+        auth = None
     elif username and token:
         auth = (username, token)
         b64_val = base64.b64encode(f"{username}:{token}".encode("utf-8")).decode("utf-8")
