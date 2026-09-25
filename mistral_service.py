@@ -358,55 +358,75 @@ def call_mistral_mcp_architect(user_message: str, history: List[Dict[str, str]] 
     return result.get("spec")
 
 
-AGENT_SYSTEM_PROMPT = """You are an Enterprise AI Agent connected directly to live MCP Servers via a secured Model Context Protocol Gateway.
-You assist developers and DevOps engineers by executing queries, actions, observability checks, and automated tasks across all registered MCP servers.
+AGENT_SYSTEM_PROMPT = """You are the Lead Enterprise Autonomous AI Operations Agent connected directly to live MCP Servers via a secured Model Context Protocol Gateway.
+You operate as a collaborative multi-agent cognitive panel:
+1. 🎯 Intent & Platform Disambiguator: Rigorously verifies which specific platform the user is targeting. NEVER confuses GitHub with Azure DevOps, Azure App Service with VMs, or ServiceNow with Jira.
+2. 🔬 Schema & Parameter Validator: Analyzes tool parameter requirements, extracts arguments from user query and history, and prompts for missing mandatory inputs.
+3. 🛡️ Safety & Lifecycle Safeguard: Ensures non-destructive inspection is used for broad access checks, and requests confirmation for disruptive state changes.
+4. 🧠 Multi-Turn Context Window Memory: Retains the full conversational session memory across all turns. Resolves relative references ("that repo", "it", "the first one", "restart it").
 
-AVAILABLE LIVE MCP SERVERS & TOOLS:
+AVAILABLE LIVE MCP SERVERS & REGISTERED TOOLS:
 {server_catalog}
 
-YOUR INSTRUCTIONS:
-1. MULTI-TURN CONVERSATION MEMORY & CONTEXT:
-   - Always analyze previous messages in the conversation history.
-   - If the user refers to "it", "that VM", "this incident", "that repo", or gives a short reply answering a previous question (e.g., "vm-agent-runner", "INC0010090", "yes"), resolve the entity and target action from the previous conversation context!
-2. INTERACTIVE CLARIFICATION & CONFIRMATION:
-   - If a request is ambiguous, incomplete, or missing a required parameter (such as VM name, incident ID, repo name, app name), return type "ask_user" with a friendly clarification question.
-   - For mutating/lifecycle actions (e.g. restart, power off, deallocate, delete, resolve), if the specific resource is missing or ambiguous, ask the user to confirm or specify which target they mean before proceeding.
-3. ACCURATE ACTION VERB & TOOL ROUTING:
-   - Match action verbs to the corresponding lifecycle/mutation tools:
-     • VM actions: "restart" -> restart_vm, "start" -> start_vm, "stop"/"deallocate" -> deallocate_vm / stop_vm, "details"/"status" -> get_vm_details, "list" -> list_vms.
-     • App Service actions: "restart" -> restart_app_service, "start" -> start_app_service, "stop" -> stop_app_service, "list" -> list_app_services, "details" -> get_app_service_details.
-     • ServiceNow actions: "get"/"details" -> get_incident, "create" -> create_incident, "resolve" -> resolve_incident / update_incident, "add note" -> add_work_note, "list" -> list_incidents.
-     • Azure DevOps actions: "list repos" -> list_repositories, "list projects" -> list_projects, "list builds"/"pipelines" -> list_builds, "trigger" -> run_pipeline / trigger_build.
-   - NEVER default to listing tools when the user requested a specific action on an entity.
-4. ACCURATE TOOL CALLING:
-   - When all required arguments are known, return type "tool_call".
-5. GENERAL CONVERSATION:
-   - If the user is asking a general question or greeting, return type "message".
-6. PRESERVE BROAD SEARCHES & NEVER HALLUCINATE FILTERS:
-   - When listing items (e.g., "list incidents", "show VMs", "get repos"), DO NOT invent dummy or restrictive filters. Pass `{}` or only the specific filters the user requested.
+STRICT PLATFORM DISAMBIGUATION & ROUTING MANDATES:
+1. GITHUB vs AZURE DEVOPS:
+   - When the user mentions "GitHub", "gh", "my github", "github repo", "github issues", "github pr", or GitHub actions:
+     -> Target server MUST BE 'github' (NEVER 'azure_devops', 'azure_app_service', or 'azure_vms').
+     -> If user asks "do you have access to my github?", "can you see my github repositories?", or "list my github repos":
+        Return type="tool_call", server_id="github", tool_name="list_repositories", arguments={}.
+     -> If user asks about a specific GitHub repository details:
+        Return type="tool_call", server_id="github", tool_name="get_repository", arguments={"owner": "...", "repo": "..."}.
+   - When the user mentions "Azure DevOps", "ADO", "VSTS", "azure pipelines", "devops project", "ADO repo", or "Azure boards":
+     -> Target server MUST BE 'azure_devops' (NEVER 'github').
+     -> If user asks "do you have access to Azure DevOps?" or "list my ADO projects":
+        Return type="tool_call", server_id="azure_devops", tool_name="list_projects", arguments={}.
+     -> If user asks to list ADO repositories:
+        Return type="tool_call", server_id="azure_devops", tool_name="list_repositories", arguments={}.
+
+2. AZURE APP SERVICE vs AZURE VIRTUAL MACHINES:
+   - Azure App Service ('azure_app_service'): for web apps, sites, app services.
+     -> List: list_app_services, Details: get_app_service_details, Lifecycle: restart_app_service, start_app_service, stop_app_service.
+   - Azure Virtual Machines ('azure_vms' or 'azure_virtual_machines'): for VMs, virtual machines, compute instances.
+     -> List: list_vms, Details: get_vm_details, Lifecycle: restart_vm, start_vm, deallocate_vm.
+
+3. SERVICENOW ('servicenow'):
+   - For incidents, tickets, change requests, work notes.
+     -> List: list_incidents, Details: get_incident, Create: create_incident, Update/Resolve: resolve_incident / update_incident.
+
+4. DOCKER ('docker') & JENKINS ('jenkins'):
+   - Docker: list_containers, get_container_logs, restart_container.
+   - Jenkins: list_jobs, build_job, get_job_status.
+
+COGNITIVE WORKFLOW ("THINK BEFORE ACT"):
+Step 1 - Context & Platform Identification: Determine the user's intent and identify the exact platform they are targeting from message + history.
+Step 2 - Server Verification: Check if the target platform is registered in AVAILABLE LIVE MCP SERVERS.
+         - If the server IS registered and user asks if you have access or wants to query it: form a tool_call with an exploratory/read tool (e.g. list_repositories, list_projects, list_vms, list_incidents).
+         - If the server is NOT registered: return type="message" explaining clearly that the server is not currently active in the Gateway and provide steps to register it.
+Step 3 - Parameter Validation: Check if required arguments (like repo name, incident ID, VM name) are provided or can be inferred from history. If a required argument is missing, return type="ask_user".
+Step 4 - Formulation: Output strictly valid JSON.
 
 OUTPUT FORMAT (STRICT JSON ONLY):
-For tool call:
-{{
+For executing an MCP Tool:
+{
   "type": "tool_call",
-  "server_id": "server_id",
-  "tool_name": "tool_name",
-  "arguments": {{}},
-  "thought": "Reasoning"
-}}
+  "server_id": "exact_registered_server_id",
+  "tool_name": "exact_tool_name",
+  "arguments": {},
+  "thought": "Step-by-step reasoning explaining target platform resolution, tool selection, and argument extraction."
+}
 
-For asking missing parameters / interactive clarification:
-{{
+For requesting clarification / missing parameters:
+{
   "type": "ask_user",
   "missing_param": "param_name",
-  "reply": "Friendly conversational question asking for the parameter or confirming the target."
-}}
+  "reply": "Friendly conversational question asking for the parameter or clarifying the target platform."
+}
 
-For direct messages:
-{{
+For conversational messages / general questions:
+{
   "type": "message",
   "reply": "Markdown response to user."
-}}
+}
 """
 
 
@@ -761,8 +781,77 @@ def format_tool_output_human_readable(server_id: str, tool_name: str, raw_output
                 f"{table_md}"
             )
 
-    # 4. Azure DevOps Projects / Repositories / Builds
-    if "azure_devops" in s_lower or "devops" in s_lower or "ado" in s_lower or "project" in t_lower or "repo" in t_lower or "build" in t_lower:
+    # 4. GitHub Repositories / Profile / Issues / Pull Requests
+    if "github" in s_lower:
+        items = data if isinstance(data, list) else (data.get("items", []) if isinstance(data, dict) and isinstance(data.get("items"), list) else [data])
+        if isinstance(data, dict) and "items" not in data:
+            items = [data]
+
+        if not items or (len(items) == 1 and not items[0]):
+            return f"ℹ️ No items returned from GitHub (`{tool_name}`)."
+
+        # Check if single user profile
+        if isinstance(data, dict) and "login" in data and ("avatar_url" in data or "public_repos" in data):
+            u_login = data.get("login", "Unknown")
+            u_name = data.get("name") or u_login
+            u_repos = data.get("public_repos", 0)
+            u_followers = data.get("followers", 0)
+            u_url = data.get("html_url", f"https://github.com/{u_login}")
+            return (
+                f"### 🐙 GitHub Authenticated User: **[{u_name}]({u_url})**\n\n"
+                f"| Property | Value |\n"
+                f"| :--- | :--- |\n"
+                f"| **Username** | `{u_login}` |\n"
+                f"| **Public Repositories** | `{u_repos}` |\n"
+                f"| **Followers** | `{u_followers}` |\n"
+                f"| **Profile Link** | [{u_url}]({u_url}) |\n"
+            )
+
+        if any(k in t_lower for k in ["repo", "list_repositories", "get_repository"]):
+            rows = []
+            for r in items[:25]:
+                if not isinstance(r, dict):
+                    continue
+                name = r.get("name", "N/A")
+                full_name = r.get("full_name", name)
+                vis = "🔒 Private" if r.get("private") else "🌐 Public"
+                stars = r.get("stargazers_count", 0)
+                branch = r.get("default_branch", "main")
+                html_url = r.get("html_url", "")
+                link_str = f"[{full_name}]({html_url})" if html_url else f"**{full_name}**"
+                rows.append(f"| {link_str} | {vis} | ⭐ `{stars}` | `{branch}` |")
+
+            table_md = "\n".join(rows)
+            return (
+                f"Found **{len(items)} Repository(ies)** in GitHub:\n\n"
+                f"| Repository Name | Visibility | Stars | Default Branch |\n"
+                f"| :--- | :--- | :--- | :--- |\n"
+                f"{table_md}"
+            )
+        elif any(k in t_lower for k in ["issue", "pull", "pr"]):
+            rows = []
+            for it in items[:20]:
+                if not isinstance(it, dict):
+                    continue
+                num = it.get("number", "N/A")
+                title = it.get("title", "No title")
+                if len(title) > 45:
+                    title = title[:42] + "..."
+                state = format_state_badge(it.get("state", "open"))
+                html_url = it.get("html_url", "")
+                link_str = f"[#{num}]({html_url})" if html_url else f"#{num}"
+                rows.append(f"| {link_str} | {title} | {state} |")
+
+            table_md = "\n".join(rows)
+            return (
+                f"Found **{len(items)} Item(s)** in GitHub:\n\n"
+                f"| Issue / PR | Title | State |\n"
+                f"| :--- | :--- | :--- |\n"
+                f"{table_md}"
+            )
+
+    # 5. Azure DevOps Projects / Repositories / Builds
+    if any(k in s_lower for k in ["azure_devops", "azure-devops", "devops", "ado", "vsts"]):
         items = data.get("value", []) if isinstance(data, dict) else (data if isinstance(data, list) else [data])
         if not items:
             return f"ℹ️ No items returned from Azure DevOps (`{tool_name}`)."
@@ -873,12 +962,12 @@ def chat_with_mcp_agent(
         s_name = s_data.get("name", s_id)
         tools = s_data.get("all_tools") or s_data.get("tools") or []
         t_names = [t.get("name") for t in tools if isinstance(t, dict) and t.get("name")]
-        catalog_lines.append(f"- Server '{s_id}' ({s_name}): {', '.join(t_names[:15])}")
+        catalog_lines.append(f"- Server ID: '{s_id}' (Name: {s_name})\n  Available Tools: {', '.join(t_names[:30])}")
     catalog_text = "\n".join(catalog_lines) if catalog_lines else "No external MCP servers currently registered."
 
     system_prompt = AGENT_SYSTEM_PROMPT.replace("{server_catalog}", catalog_text)
     messages = [{"role": "system", "content": system_prompt}]
-    for h in (history or [])[-8:]:
+    for h in (history or [])[-24:]:
         if isinstance(h, dict) and "role" in h and "content" in h:
             messages.append(h)
     messages.append({"role": "user", "content": user_message})
@@ -886,9 +975,9 @@ def chat_with_mcp_agent(
     try:
         res = llm_client.chat_completion(
             messages=messages,
-            temperature=0.2,
+            temperature=0.1,
             max_tokens=2048,
-            timeout=8.0
+            timeout=25.0
         )
         content = res.get("content", "")
         agent_decision = parse_and_repair_json(content)
@@ -910,6 +999,37 @@ def chat_with_mcp_agent(
             target_server = agent_decision.get("server_id")
             target_tool = agent_decision.get("tool_name")
             tool_args = agent_decision.get("arguments") or {}
+
+            # Strict Platform Disambiguation Safeguard
+            msg_low = user_message.lower()
+            is_github_query = any(w in msg_low for w in ["github", "gh", "my github", "github repo", "github issues", "github pr", "github actions"])
+            is_ado_query = any(w in msg_low for w in ["azure devops", "azure_devops", "ado", "vsts", "azure pipeline", "pipelines", "builds", "ado project", "ado repo"])
+            is_snow_query = any(w in msg_low for w in ["servicenow", "snow", "incident", "ticket"])
+            is_app_query = any(w in msg_low for w in ["app service", "appservice", "webapp", "web app", "site"])
+            is_vm_query = any(w in msg_low for w in ["vm", "virtual machine", "virtualmachine", "compute", "runner"])
+
+            if is_github_query and target_server != "github" and "github" in servers:
+                target_server = "github"
+                g_tools = [t.get("name") for t in (servers.get("github", {}).get("tools") or servers.get("github", {}).get("all_tools") or [])]
+                if not target_tool or target_tool not in g_tools:
+                    target_tool = "list_repositories" if "list_repositories" in g_tools else (g_tools[0] if g_tools else "list_repositories")
+            elif is_ado_query and target_server != "azure_devops" and "azure_devops" in servers:
+                target_server = "azure_devops"
+                ado_tools = [t.get("name") for t in (servers.get("azure_devops", {}).get("tools") or servers.get("azure_devops", {}).get("all_tools") or [])]
+                if not target_tool or target_tool not in ado_tools:
+                    target_tool = "list_projects" if "list_projects" in ado_tools else (ado_tools[0] if ado_tools else "list_projects")
+            elif is_app_query and target_server not in ["azure_app_service", "app_service"] and ("azure_app_service" in servers or "app_service" in servers):
+                target_server = "azure_app_service" if "azure_app_service" in servers else "app_service"
+            elif is_vm_query and target_server not in ["azure_virtual_machines", "azure_vms"] and ("azure_virtual_machines" in servers or "azure_vms" in servers):
+                target_server = "azure_virtual_machines" if "azure_virtual_machines" in servers else "azure_vms"
+            elif is_snow_query and target_server != "servicenow" and "servicenow" in servers:
+                target_server = "servicenow"
+
+            if target_server not in servers:
+                return {
+                    "type": "message",
+                    "reply": f"ℹ️ The **{target_server}** MCP server is not currently registered or online. Registered servers: {', '.join(servers.keys())}."
+                }
 
             server_tools = [t.get("name") for t in (servers.get(target_server, {}).get("all_tools") or servers.get(target_server, {}).get("tools") or [])]
             if target_tool not in server_tools:
@@ -1007,7 +1127,7 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
         msg_lower = user_message.lower().strip()
         
         # Build multi-turn context from recent history + current message
-        history_texts = [h.get("content", "") for h in (history or [])[-4:] if isinstance(h, dict)]
+        history_texts = [h.get("content", "") for h in (history or [])[-6:] if isinstance(h, dict)]
         combined_context = " ".join(history_texts + [user_message]).strip()
         combined_lower = combined_context.lower()
 
@@ -1040,17 +1160,40 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                 target_server = "servicenow"
                 target_tool = "list_incidents"
 
-        # 2. Virtual Machine checking (Azure VMs)
-        if not target_server and "azure_virtual_machines" in servers:
-            vm_tools = [t.get("name") for t in servers["azure_virtual_machines"].get("tools", [])]
-            # Match VM name in query or previous history turns
+        # 2. GitHub checking (Strictly checked before Azure DevOps)
+        if not target_server and "github" in servers and any(w in combined_lower for w in ["github", "gh", "git repo", "my github", "github repo", "github repos", "github issues", "github pr"]):
+            target_server = "github"
+            g_tools = [t.get("name") for t in servers["github"].get("tools", [])]
+            if any(w in msg_lower for w in ["user", "who am i", "profile", "account"]):
+                target_tool = "get_authenticated_user" if "get_authenticated_user" in g_tools else (g_tools[0] if g_tools else "list_repositories")
+            elif any(w in msg_lower for w in ["issue"]):
+                target_tool = "list_issues" if "list_issues" in g_tools else "list_repositories"
+            elif any(w in msg_lower for w in ["pull", "pr"]):
+                target_tool = "list_pull_requests" if "list_pull_requests" in g_tools else "list_repositories"
+            else:
+                target_tool = "list_repositories" if "list_repositories" in g_tools else (g_tools[0] if g_tools else "list_repositories")
+
+        # 3. Azure DevOps Project / Repo / Build checking (Requires explicit ADO keywords)
+        if not target_server and "azure_devops" in servers and any(w in combined_lower for w in ["azure devops", "azure_devops", "devops", "ado", "vsts", "azure pipeline", "pipelines", "builds", "ado project", "ado repo"]):
+            target_server = "azure_devops"
+            ado_tools = [t.get("name") for t in servers["azure_devops"].get("tools", [])]
+            if "repo" in msg_lower or "repository" in msg_lower:
+                target_tool = "list_repositories" if "list_repositories" in ado_tools else "list_projects"
+            elif "pipeline" in msg_lower or "build" in msg_lower:
+                target_tool = "list_builds" if "list_builds" in ado_tools else "list_projects"
+            else:
+                target_tool = "list_projects" if "list_projects" in ado_tools else (ado_tools[0] if ado_tools else "list_projects")
+
+        # 4. Virtual Machine checking (Azure VMs)
+        if not target_server and ("azure_virtual_machines" in servers or "azure_vms" in servers):
+            vm_srv_key = "azure_virtual_machines" if "azure_virtual_machines" in servers else "azure_vms"
+            vm_tools = [t.get("name") for t in servers[vm_srv_key].get("tools", [])]
             vm_match = re.search(r'\b(vm-[a-zA-Z0-9_\-]+|[a-zA-Z0-9_\-]+-runner|[a-zA-Z0-9_\-]+-vm)\b', combined_context, re.IGNORECASE)
             if not vm_match and ("vm-agent-runner" in combined_lower or "runner" in combined_lower):
                 vm_name_found = "vm-agent-runner"
             elif vm_match:
                 vm_name_found = vm_match.group(1)
             else:
-                # Direct word following 'vm'
                 vm_word_m = re.search(r'\b(?:vm|virtual\s*machine)\s+([a-zA-Z0-9_\-]+)\b', combined_context, re.IGNORECASE)
                 if vm_word_m and vm_word_m.group(1).lower() not in ["the", "this", "my", "is", "online", "running", "all", "are"]:
                     vm_name_found = vm_word_m.group(1)
@@ -1058,23 +1201,15 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                     vm_name_found = None
 
             msg_has_vm_action = any(w in msg_lower for w in ["restart", "reboot", "start", "power on", "turn on", "boot", "stop", "deallocate", "power off", "shutdown", "details", "status", "info", "inspect", "show", "get", "view", "list"])
-            if msg_has_vm_action:
-                is_restart = any(w in msg_lower for w in ["restart", "reboot"])
-                is_start = any(w in msg_lower for w in ["start", "power on", "turn on", "boot"])
-                is_stop = any(w in msg_lower for w in ["stop", "deallocate", "power off", "turn off", "shutdown"])
-                is_details = any(w in msg_lower for w in ["details", "status", "info", "inspect", "show", "get", "view", "what is", "tell me about"])
-                is_list = any(w in msg_lower for w in ["list", "all", "which", "available"])
-            else:
-                is_restart = any(w in combined_lower for w in ["restart", "reboot"])
-                is_start = any(w in combined_lower for w in ["start", "power on", "turn on", "boot"])
-                is_stop = any(w in combined_lower for w in ["stop", "deallocate", "power off", "turn off", "shutdown"])
-                is_details = any(w in combined_lower for w in ["details", "status", "info", "inspect", "show", "get", "view", "what is"])
-                is_list = any(w in combined_lower for w in ["list", "all", "which", "available"])
-
             is_vm_intent = any(w in combined_lower for w in ["vm", "virtual machine", "virtualmachine", "compute"]) or vm_name_found is not None
 
             if is_vm_intent:
-                target_server = "azure_virtual_machines"
+                target_server = vm_srv_key
+                is_restart = any(w in msg_lower for w in ["restart", "reboot"])
+                is_start = any(w in msg_lower for w in ["start", "power on", "turn on", "boot"])
+                is_stop = any(w in msg_lower for w in ["stop", "deallocate", "power off", "turn off", "shutdown"])
+                is_details = any(w in msg_lower for w in ["details", "status", "info", "inspect", "show", "get", "view", "what is"])
+
                 if is_restart:
                     if not vm_name_found:
                         return {
@@ -1108,34 +1243,27 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                 else:
                     target_tool = "list_vms"
 
-        # 3. App Service checking (Azure App Service)
-        if not target_server and "azure_app_service" in servers:
-            app_tools = [t.get("name") for t in servers["azure_app_service"].get("tools", [])]
+        # 5. App Service checking (Azure App Service)
+        if not target_server and ("azure_app_service" in servers or "app_service" in servers):
+            app_srv_key = "azure_app_service" if "azure_app_service" in servers else "app_service"
+            app_tools = [t.get("name") for t in servers[app_srv_key].get("tools", [])]
             app_match = re.search(r'\b(ai-mcp-platform-shakil|devops-vsp-sample-app-shakil|[a-zA-Z0-9_\-]+-app|[a-zA-Z0-9_\-]+\.azurewebsites\.net)\b', combined_context, re.IGNORECASE)
             app_name_found = app_match.group(1).replace(".azurewebsites.net", "") if app_match else None
-
-            msg_has_app_action = any(w in msg_lower for w in ["restart", "reboot", "start", "resume", "stop", "pause", "details", "status", "info", "inspect", "show", "get", "view", "list"])
-            if msg_has_app_action:
-                is_restart_app = any(w in msg_lower for w in ["restart", "reboot"])
-                is_start_app = any(w in msg_lower for w in ["start", "resume"])
-                is_stop_app = any(w in msg_lower for w in ["stop", "pause"])
-                is_details_app = any(w in msg_lower for w in ["details", "status", "info", "inspect", "show", "get", "view", "what is"])
-            else:
-                is_restart_app = any(w in combined_lower for w in ["restart", "reboot"])
-                is_start_app = any(w in combined_lower for w in ["start", "resume"])
-                is_stop_app = any(w in combined_lower for w in ["stop", "pause"])
-                is_details_app = any(w in combined_lower for w in ["details", "status", "info", "inspect", "show", "get", "view"])
-
             is_app_intent = any(w in combined_lower for w in ["app service", "appservice", "webapp", "web app", "site"]) or app_name_found is not None
 
             if is_app_intent:
-                target_server = "azure_app_service"
+                target_server = app_srv_key
+                is_restart_app = any(w in msg_lower for w in ["restart", "reboot"])
+                is_start_app = any(w in msg_lower for w in ["start", "resume"])
+                is_stop_app = any(w in msg_lower for w in ["stop", "pause"])
+                is_details_app = any(w in msg_lower for w in ["details", "status", "info", "inspect", "show", "get", "view"])
+
                 if is_restart_app:
                     if not app_name_found:
                         return {
                             "type": "ask_user",
                             "missing_param": "app_name",
-                            "reply": "Which App Service would you like to restart? (e.g. **ai-mcp-platform-shakil** or **devops-vsp-sample-app-shakil**)"
+                            "reply": "Which App Service would you like to restart? (e.g. **ai-mcp-platform-shakil**)"
                         }
                     target_tool = "restart_app_service"
                     tool_args = {"name": app_name_found, "app_name": app_name_found}
@@ -1162,21 +1290,6 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                     tool_args = {"name": app_name_found, "app_name": app_name_found}
                 else:
                     target_tool = "list_app_services"
-
-        # 4. Azure DevOps Project / Repo / Build checking
-        if not target_server and "azure_devops" in servers:
-            target_server = "azure_devops"
-            if "repo" in msg_lower or "repository" in msg_lower:
-                target_tool = "list_repositories"
-            elif "pipeline" in msg_lower or "build" in msg_lower:
-                target_tool = "list_builds"
-            else:
-                target_tool = "list_projects"
-
-        # 5. GitHub
-        if not target_server and "github" in servers and any(w in msg_lower for w in ["github", "git repo", "repositories"]):
-            target_server = "github"
-            target_tool = "list_repositories"
 
         # 6. Jenkins
         if not target_server and "jenkins" in servers and any(w in msg_lower for w in ["jenkins", "job"]):
@@ -1213,9 +1326,11 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                     "reply": f"⚠️ Error executing {target_server}.{target_tool}: {str(ex_exec)}"
                 }
 
+        # Friendly multi-server listing if no server was identified
+        connected_list = ", ".join([f"**{s}**" for s in servers.keys()]) if servers else "No servers"
         return {
             "type": "message",
-            "reply": f"⚠️ **AI Service Notice:** The configured LLM provider returned an error: `{str(e)}`.\n\n*Tip: You can switch models or update your API key anytime in **⚙️ AI Model Settings**.*"
+            "reply": f"🤖 I am connected to your live MCP servers: {connected_list}.\n\nHow can I help? You can ask me to:\n- 🐙 **GitHub**: *\"List my GitHub repositories\"*, *\"Get repository details\"*\n- 🔷 **Azure DevOps**: *\"List my ADO projects\"*, *\"List ADO repositories\"*\n- 🎫 **ServiceNow**: *\"Show active incidents\"*, *\"Create an incident\"*\n- 🌐 **App Services**: *\"Show my web apps\"*, *\"Restart App Service\"*\n- 💻 **Virtual Machines**: *\"List VMs\"*, *\"Restart vm-agent-runner\"*"
         }
 
 

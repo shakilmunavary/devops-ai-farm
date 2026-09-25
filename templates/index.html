@@ -3648,13 +3648,42 @@
             feed.appendChild(userBubble);
             feed.scrollTop = feed.scrollHeight;
 
-            // 2. Append Thinking Bubble
+            // 2. Append Multi-Agent Thinking Bubble
             const thinkingBubble = document.createElement('div');
             thinkingBubble.className = 'chat-bubble thinking';
             thinkingBubble.id = 'agent-thinking-bubble';
-            thinkingBubble.innerHTML = '🤖 <em>Inspecting MCP tool catalog & formulating response...</em>';
+            thinkingBubble.style.background = 'rgba(15, 23, 42, 0.85)';
+            thinkingBubble.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+            thinkingBubble.style.borderRadius = '10px';
+            thinkingBubble.style.padding = '12px 16px';
+            thinkingBubble.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #38bdf8; font-size: 13px;">
+                    <span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid #38bdf8; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite;"></span>
+                    <span id="agent-act-title">🤖 Multi-Agent Deliberation Active...</span>
+                </div>
+                <div id="agent-act-sub" style="font-size: 11px; color: #94a3b8; margin-left: 20px; margin-top: 3px;">
+                    Disambiguating platform intent and verifying tool parameter schema...
+                </div>
+            `;
             feed.appendChild(thinkingBubble);
             feed.scrollTop = feed.scrollHeight;
+
+            const activitySteps = [
+                { title: "🎯 Intent & Platform Disambiguator:", sub: "Analyzing user intent across active MCP servers (GitHub, ADO, Azure, ServiceNow)..." },
+                { title: "🔬 Schema & Parameter Validator:", sub: "Verifying exact tool signature, required inputs, and argument scoping..." },
+                { title: "🛡️ Safety & Policy Guard:", sub: "Confirming read/write safety policies and non-destructive execution..." },
+                { title: "🧠 Multi-Turn Memory Synthesis:", sub: "Integrating conversation context window and executing live MCP gateway call..." }
+            ];
+            let stepIdx = 0;
+            const stepInterval = setInterval(() => {
+                stepIdx = (stepIdx + 1) % activitySteps.length;
+                const tEl = document.getElementById('agent-act-title');
+                const sEl = document.getElementById('agent-act-sub');
+                if (tEl && sEl) {
+                    tEl.innerText = activitySteps[stepIdx].title;
+                    sEl.innerText = activitySteps[stepIdx].sub;
+                }
+            }, 1200);
 
             // Disable input while processing
             document.getElementById('agent-send-btn').disabled = true;
@@ -3671,6 +3700,7 @@
                 });
 
                 const data = await res.json();
+                clearInterval(stepInterval);
                 const tb = document.getElementById('agent-thinking-bubble');
                 if (tb) tb.remove();
 
@@ -3684,7 +3714,7 @@
                         <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="font-size: 13px;">🛠️ <strong>Executed Tool:</strong> <code style="color: #38bdf8;">${tc.server_id}.${tc.tool_name}()</code></span>
+                                    <span style="font-size: 13px;">🛠️ <strong>Executed Tool:</strong> <code style="color: #38bdf8;">${escapeHtml(tc.server_id)}.${escapeHtml(tc.tool_name)}()</code></span>
                                     <span class="badge badge-ready" style="font-size: 10px;">HTTP 200 OK</span>
                                 </div>
                                 <button class="btn-chip-action" style="font-size: 10px;" onclick="toggleRawOutput('${callId}')">Raw Output</button>
@@ -3702,7 +3732,7 @@
                     botBubble.innerHTML = `
                         <div style="margin-bottom: 6px;">
                             <span class="badge" style="background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.4); margin-bottom: 8px; display: inline-block;">
-                                📌 Missing Parameter: ${escapeHtml(data.missing_param || 'Required')}
+                                📌 Clarification / Missing Input: ${escapeHtml(data.missing_param || 'Required')}
                             </span>
                         </div>
                         <div>${formatMarkdownToHtml(data.reply)}</div>
@@ -3714,11 +3744,15 @@
                 feed.appendChild(botBubble);
                 feed.scrollTop = feed.scrollHeight;
 
-                // Update conversation history
+                // Update conversation history (preserve full context window up to 30 turns)
                 agentChatHistory.push({ role: 'user', content: text });
                 agentChatHistory.push({ role: 'assistant', content: data.reply });
+                if (agentChatHistory.length > 30) {
+                    agentChatHistory = agentChatHistory.slice(-30);
+                }
 
             } catch (err) {
+                clearInterval(stepInterval);
                 const tb = document.getElementById('agent-thinking-bubble');
                 if (tb) tb.remove();
                 const errBubble = document.createElement('div');
