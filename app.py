@@ -764,21 +764,12 @@ def gateway_status():
     return jsonify(status)
 
 
-def evaluate_server_health(platform_id: str, server_script: str, tools: list) -> dict:
+def evaluate_server_health_from_creds(platform_id: str, creds_dict: dict, tools: list) -> dict:
     """
     Direct HTTP Pre-Flight Probe Test (Equivalent to running a single curl command):
-    Reads credentials from .env and executes a fast, direct HTTP request against upstream service.
+    Uses in-memory credentials dict and executes a fast, direct HTTP request against upstream service.
     """
-    server_dir = os.path.dirname(server_script)
-    env_file = os.path.join(server_dir, ".env")
-    creds = {}
-    if os.path.exists(env_file):
-        with open(env_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    creds[k.strip().lower()] = v.strip()
+    creds = {k.strip().lower(): str(v).strip() for k, v in (creds_dict or {}).items() if v is not None}
 
     # Extract base URL, Auth, and Scopes dynamically from any field names
     base_url = ""
@@ -904,13 +895,26 @@ def evaluate_server_health(platform_id: str, server_script: str, tools: list) ->
         # Choose appropriate ARM probe
         if any(x in p_id_lower for x in ["app_service", "appservice", "web"]):
             probe_name = "list_app_services"
-            probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites?api-version=2022-03-01"
+            if subscription_id and resource_group:
+                probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites?api-version=2022-03-01"
+            elif subscription_id:
+                probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Web/sites?api-version=2022-03-01"
+            else:
+                probe_url = "https://management.azure.com/subscriptions?api-version=2021-04-01"
         elif any(x in p_id_lower for x in ["vm", "compute", "iaas"]):
             probe_name = "list_vms"
-            probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines?api-version=2023-03-01"
+            if subscription_id and resource_group:
+                probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines?api-version=2023-03-01"
+            elif subscription_id:
+                probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Compute/virtualMachines?api-version=2023-03-01"
+            else:
+                probe_url = "https://management.azure.com/subscriptions?api-version=2021-04-01"
         else:
             probe_name = "list_resource_groups"
-            probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups?api-version=2021-04-01"
+            if subscription_id:
+                probe_url = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups?api-version=2021-04-01"
+            else:
+                probe_url = "https://management.azure.com/subscriptions?api-version=2021-04-01"
 
         try:
             with httpx.Client(verify=False, headers=headers, timeout=15.0) as client:
@@ -974,7 +978,14 @@ def evaluate_server_health(platform_id: str, server_script: str, tools: list) ->
                 break
 
         if not endpoint:
-            endpoint = (tools[0].get("endpoint") if tools else "") or "/status"
+            if "github" in p_id_lower:
+                endpoint = "/user/repos"
+                probe_name = "list_repositories"
+            elif any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]):
+                endpoint = "/api/now/table/incident?sysparm_limit=5"
+                probe_name = "list_incidents"
+            else:
+                endpoint = (tools[0].get("endpoint") if tools else "") or "/status"
 
     # Universal normalization
     if endpoint.strip("/") in ["repos", "repositories"] and "github" in p_id_lower:
@@ -1125,6 +1136,39 @@ def evaluate_server_health(platform_id: str, server_script: str, tools: list) ->
             "reason": f"Connection Error: {str(e)}",
             "preview": str(e)
         }
+
+
+def evaluate_server_health(platform_id: str, server_script: str, tools: list) -> dict:
+    """
+    Direct HTTP Pre-Flight Probe Test (Equivalent to running a single curl command):
+    Reads credentials from .env and executes a fast, direct HTTP request against upstream service.
+    """
+    server_dir = os.path.dirname(server_script)
+    env_file = os.path.join(server_dir, ".env")
+    creds = {}
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    creds[k.strip().lower()] = v.strip()
+    return evaluate_server_health_from_creds(platform_id, creds, tools)
+
+
+@app.route("/api/servers/probe", methods=["POST"])
+def probe_server_creds():
+    """Live interactive pre-flight probe endpoint for test-before-publish workflow."""
+    payload = request.get_json() or {}
+    platform_id = payload.get("platform_id", "").lower().strip()
+    config_values = payload.get("config", {})
+    tools = payload.get("tools", [])
+
+    if not platform_id:
+        return jsonify({"passed": False, "probe": "config", "error": "Platform ID is required"}), 400
+
+    eval_result = evaluate_server_health_from_creds(platform_id, config_values, tools)
+    return jsonify(eval_result)
 
 
 @app.route("/api/servers/<platform_id>/evaluate", methods=["POST"])

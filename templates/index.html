@@ -2894,7 +2894,11 @@
             const feed = document.getElementById('chat-feed');
             const bubble = document.createElement('div');
             bubble.className = 'chat-bubble assistant';
-            bubble.innerHTML = html.replace(/\n/g, '<br>');
+            if (html.includes('<') && html.includes('>')) {
+                bubble.innerHTML = html;
+            } else {
+                bubble.innerHTML = html.replace(/\n/g, '<br>');
+            }
             feed.appendChild(bubble);
             feed.scrollTop = feed.scrollHeight;
             return bubble;
@@ -3196,9 +3200,7 @@
                             ${f.label} ${f.required ? '<span style="color: #ef4444;">*</span>' : '<span style="color: var(--text-muted); font-size: 11px;">(optional)</span>'}
                         </label>
                         <div style="position: relative; display: flex; align-items: center;">
-                            <input type="${isSec ? 'password' : 'text'}" id="cfld_${f.key}" class="chat-input" 
-                                style="width: 100%; font-family: ${isSec ? 'var(--font-mono)' : 'inherit'}; padding-right: ${isSec ? '36px' : '10px'};" 
-                                placeholder="${f.placeholder || f.label}" value="${currentVal}">
+                            <input type="${isSec ? 'password' : 'text'}" id="cfld_${f.key}" class="chat-input" style="width: 100%; font-family: ${isSec ? 'var(--font-mono)' : 'inherit'}; padding-right: ${isSec ? '36px' : '10px'};" placeholder="${f.placeholder || f.label}" value="${currentVal}">
                             ${isSec ? `<button type="button" style="position: absolute; right: 8px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 14px;" onclick="toggleInputVisibility('cfld_${f.key}', this)">👁️</button>` : ''}
                         </div>
                         ${f.prompt ? `<div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">${f.prompt}</div>` : ''}
