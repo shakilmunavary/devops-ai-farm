@@ -2900,11 +2900,18 @@
             return bubble;
         }
 
-        function appendUserMessage(text) {
+        function appendUserMessage(text, isSecret = false) {
             const feed = document.getElementById('chat-feed');
             const bubble = document.createElement('div');
             bubble.className = 'chat-bubble user';
-            bubble.textContent = text;
+            
+            // Check if secret or looks like sensitive token
+            const looksLikeToken = isSecret || /^(?:ghp_|glpat-|eyJ|Bearer\s+|Basic\s+|[a-f0-9]{32,})/i.test(text.trim());
+            if (looksLikeToken) {
+                bubble.innerHTML = `<span style="color: #cbd5e1; font-family: var(--font-mono); letter-spacing: 2px;">••••••••••••</span> <span style="font-size: 10.5px; color: #34d399; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); padding: 1px 6px; border-radius: 4px; margin-left: 6px;">🔒 Secret Masked</span>`;
+            } else {
+                bubble.textContent = text;
+            }
             feed.appendChild(bubble);
             feed.scrollTop = feed.scrollHeight;
         }
@@ -2916,17 +2923,19 @@
                 collectedConfig: {},
                 selectedTools: [],
                 history: [],
-                inCredentialMode: false
+                inCredentialMode: false,
+                currentFieldKey: null,
+                isCurrentFieldSecret: false
             };
 
             const feed = document.getElementById('chat-feed');
             feed.innerHTML = '';
 
-            appendBotMessage(`<strong>👋 Hello! I am your Live Interactive MCP Solutions Architect.</strong><br>I provide deterministic, consistent tool suites with conversational memory. Tell me what platform or service you want to build (e.g. <em>ServiceNow</em>, <em>AWS S3 alone</em>, <em>Jenkins CI</em>, <em>Kubernetes</em>, <em>Jira</em>).<br><br><span style="color: #94a3b8; font-size: 12px;">💬 You can talk with me interactively, request tool additions/removals, or ask architectural questions at any time.</span>`);
+            appendBotMessage(`<strong>👋 Hello! I am your Lead Multi-Agent MCP Solutions Architect.</strong><br>I provide collaborative AI tool synthesis, protocol validation, and conversational memory.<br><br>Tell me what platform, tool, or API you want to build (e.g. <em>GitHub</em>, <em>ServiceNow</em>, <em>GitLab</em>, <em>Datadog</em>, <em>Jenkins CI</em>, <em>AWS</em>, or a <em>custom REST API</em>).<br><br><span style="color: #94a3b8; font-size: 12px;">💬 You can talk with me interactively, request tool additions/removals, change your mind at any step, or ask architectural questions.</span>`);
 
             const input = document.getElementById('chat-input');
             input.value = '';
-            input.placeholder = "Enter platform or instruction (e.g. ServiceNow, AWS S3 alone, Jenkins)...";
+            input.placeholder = "Enter platform or instruction (e.g. GitHub, ServiceNow, GitLab, Datadog)...";
             input.type = 'text';
             input.focus();
         }
@@ -2943,19 +2952,25 @@
             const val = overrideText || input.value.trim();
             if (!val) return;
 
+            const isSecretField = chatContext.inCredentialMode && chatContext.isCurrentFieldSecret;
+
             if (!overrideText) {
-                appendUserMessage(val);
+                appendUserMessage(val, isSecretField);
                 input.value = '';
                 input.style.height = 'auto';
             }
 
-            // If we are currently actively collecting credentials step-by-step
+            // Check if user changed their mind or is asking a conversational question during credential collection
             if (chatContext.inCredentialMode && chatContext.currentPlatform) {
-                const missing = (chatContext.currentPlatform.fields || []).filter(f => !chatContext.collectedConfig[f.key]);
-                if (missing.length > 0) {
+                const isPivotOrQuestion = val.includes('?') || 
+                    /\b(switch|change|instead|what|how|why|cancel|restart|reset|add|remove|explain|wait|actually|no|different|help)\b/i.test(val) ||
+                    (/\b(github|gitlab|servicenow|azure|jenkins|datadog|jira|slack|aws|docker)\b/i.test(val) && val.split(/\s+/).length > 2);
+
+                if (!isPivotOrQuestion) {
                     return handleCredentialCollection(val);
                 } else {
                     chatContext.inCredentialMode = false;
+                    chatContext.isCurrentFieldSecret = false;
                 }
             }
 
@@ -2963,27 +2978,27 @@
             const thinkingBubble = document.createElement('div');
             thinkingBubble.className = 'chat-bubble thinking';
             thinkingBubble.id = 'thinking-bubble';
-            thinkingBubble.style.background = 'rgba(15, 23, 42, 0.8)';
+            thinkingBubble.style.background = 'rgba(15, 23, 42, 0.85)';
             thinkingBubble.style.border = '1px solid rgba(99, 102, 241, 0.3)';
             thinkingBubble.style.borderRadius = '12px';
             thinkingBubble.style.padding = '14px 18px';
             thinkingBubble.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px; font-weight: 700; color: #a5b4fc; font-size: 13px;">
                     <span class="spinner" style="display: inline-block; width: 14px; height: 14px; border: 2px solid #818cf8; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite;"></span>
-                    <span id="act-title">🔍 Analyzing DevOps Requirements & Architecture...</span>
+                    <span id="act-title">🤖 Multi-Agent Architect Panel Analyzing Request...</span>
                 </div>
                 <div id="act-sub" style="font-size: 11px; color: #94a3b8; margin-left: 24px; margin-top: 4px;">
-                    Inspecting platform domain and API specifications...
+                    Collaborative agents (Architect, Schema Validator, Secret Shield) formulating tool suite...
                 </div>
             `;
             feed.appendChild(thinkingBubble);
             feed.scrollTop = feed.scrollHeight;
 
             const activitySteps = [
-                { title: "🔍 Analyzing DevOps Requirements & Architecture...", sub: "Inspecting platform domain and API specifications..." },
-                { title: "⚡ Discovering Endpoint Schemas & Parameters...", sub: "Structuring query, action, and monitoring tool definitions..." },
-                { title: "🛠️ Synthesizing FastMCP Server Schemas...", sub: "Generating Python type annotations, JSON-RPC handlers & decorators..." },
-                { title: "🧪 Self-Evaluating Tool Signatures & Auth Scope...", sub: "Verifying credential isolation and REST mappings..." }
+                { title: "🏗️ MCP Solutions Architect:", sub: "Synthesizing full production-grade REST endpoint mappings..." },
+                { title: "🔬 Input & Schema Validator:", sub: "Validating path parameters, query parameters, and required arguments..." },
+                { title: "🛡️ Security & Secret Shield:", sub: "Isolating tokens, PATs, and credentials into secure connection scope..." },
+                { title: "🧠 Conversational Memory:", sub: "Integrating dialogue context and self-evaluating schema consistency..." }
             ];
             let stepIdx = 0;
             const stepInterval = setInterval(() => {
@@ -2994,7 +3009,7 @@
                     tEl.innerText = activitySteps[stepIdx].title;
                     sEl.innerText = activitySteps[stepIdx].sub;
                 }
-            }, 1600);
+            }, 1400);
 
             try {
                 const res = await fetch('/api/architect/chat', {
@@ -3030,7 +3045,7 @@
                         appendBotMessage(`
                             <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 10px; padding: 14px; margin-top: 4px;">
                                 <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #f87171; margin-bottom: 6px;">
-                                    <span>⚠️ AI Execution Notice</span>
+                                    <span>⚠️ AI Architect Notice</span>
                                 </div>
                                 <div style="font-size: 13px; color: #fca5a5; line-height: 1.5; margin-bottom: 10px;">${replyMsg}</div>
                                 <button class="btn-outline" style="font-size: 11px; padding: 5px 12px; border-color: #f87171; color: #fca5a5;" onclick="openLLMConfigModal()">
@@ -3068,33 +3083,38 @@
 
                 if (remaining.length > 0) {
                     const nextF = remaining[0];
+                    chatContext.currentFieldKey = nextF.key;
+                    chatContext.isCurrentFieldSecret = Boolean(nextF.secret);
                     appendBotMessage(`✅ Recorded <strong>${currentF.label}</strong>.<br><br>Please enter <strong>${nextF.label}</strong>:<br><em>${nextF.prompt || 'Enter value:'}</em>`);
                     input.type = nextF.secret ? 'password' : 'text';
                     input.placeholder = `Enter ${nextF.label}...`;
+                    input.focus();
                 } else {
                     chatContext.inCredentialMode = false;
+                    chatContext.isCurrentFieldSecret = false;
                     input.type = 'text';
                     input.placeholder = 'Type a message or instruction...';
-                    appendBotMessage(`🎉 All credentials recorded for <strong>${spec.name}</strong>!<br>Click below to generate the FastMCP server and save credentials into <code>mcp_servers/${spec.id}/.env</code>.`);
-                    renderFinalBuildCard();
+                    appendBotMessage(`🎉 All credentials recorded for <strong>${spec.name}</strong>!`);
+                    renderInteractiveValidationCard();
                 }
             } else {
                 chatContext.inCredentialMode = false;
+                renderInteractiveValidationCard();
             }
         }
 
         function renderDiscoveredToolsCard(spec) {
             const tools = spec.tools || [];
             let html = `
-                <div class="discovery-card">
-                    <div class="discovery-header">
-                        <span class="discovery-title">⚡ ${spec.name} (${tools.length} Tools Synthesized)</span>
-                        <div class="discovery-controls">
+                <div class="discovery-card" style="border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 10px; background: rgba(15, 23, 42, 0.6); padding: 16px; margin: 10px 0;">
+                    <div class="discovery-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span class="discovery-title" style="font-weight: 700; color: #38bdf8; font-size: 14px;">⚡ ${spec.name} (${tools.length} Tools Synthesized)</span>
+                        <div class="discovery-controls" style="display: flex; gap: 6px;">
                             <button class="btn-chip-action" onclick="toggleDiscoveryTools(true)">Select All</button>
                             <button class="btn-chip-action" onclick="toggleDiscoveryTools(false)">Deselect All</button>
                         </div>
                     </div>
-                    <div class="tools-scroll-list" id="discovery-tools-scroll-list">`;
+                    <div class="tools-scroll-list" id="discovery-tools-scroll-list" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">`;
 
             const credKeys = ["url", "base_url", "instance_url", "jenkins_url", "token", "api_token", "jenkins_token", "password", "secret", "username", "jenkins_username", "crumb", "jenkins_crumb", "auth_header", "api_key"];
 
@@ -3112,23 +3132,23 @@
                     paramsText = Object.entries(cleanParams).map(([k, v]) => `${k}: ${v}`).join(' | ');
                 }
                 html += `
-                    <div class="schema-item">
-                        <input type="checkbox" id="disc-tool-${t.name}" value="${t.name}" checked onchange="updateDiscoverySelectedTools()">
-                        <div class="schema-content">
+                    <div class="schema-item" style="display: flex; gap: 10px; align-items: flex-start; background: rgba(30, 41, 59, 0.5); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                        <input type="checkbox" id="disc-tool-${t.name}" value="${t.name}" checked onchange="updateDiscoverySelectedTools()" style="margin-top: 3px;">
+                        <div class="schema-content" style="flex: 1;">
                             <div class="schema-name-row">
-                                <label for="disc-tool-${t.name}" class="schema-name" style="cursor: pointer;">${t.name}()</label>
+                                <label for="disc-tool-${t.name}" class="schema-name" style="cursor: pointer; font-family: var(--font-mono); color: #60a5fa; font-weight: 600;">${t.name}()</label>
                             </div>
-                            <div class="schema-desc" style="font-size: 12px; color: #cbd5e1; margin-bottom: 4px;">${t.description}</div>
-                            ${paramsText ? `<div style="font-family: var(--font-mono); font-size: 11px; color: #a78bfa; background: rgba(167, 139, 250, 0.1); padding: 3px 6px; border-radius: 4px; display: inline-block;">Params: ${paramsText}</div>` : '<div style="font-size: 11px; color: var(--text-muted);">No arguments required {}</div>'}
+                            <div class="schema-desc" style="font-size: 12px; color: #cbd5e1; margin-bottom: 2px;">${t.description}</div>
+                            ${paramsText ? `<div style="font-family: var(--font-mono); font-size: 11px; color: #a78bfa; background: rgba(167, 139, 250, 0.1); padding: 2px 6px; border-radius: 4px; display: inline-block;">Params: ${paramsText}</div>` : '<div style="font-size: 11px; color: var(--text-muted);">No arguments required {}</div>'}
                         </div>
                     </div>
                 `;
             });
 
             html += `</div>
-                    <div class="action-row">
-                        <button class="btn-confirm-action" onclick="confirmDiscoveryAndProceed()">
-                            🚀 Proceed to Build (Configure Credentials)
+                    <div class="action-row" style="margin-top: 14px; display: flex; justify-content: flex-end;">
+                        <button class="btn-confirm-action" style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; padding: 8px 16px; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;" onclick="confirmDiscoveryAndProceed()">
+                            🚀 Proceed to Configure Credentials & Test
                         </button>
                     </div>
                 </div>`;
@@ -3149,49 +3169,211 @@
 
         function confirmDiscoveryAndProceed() {
             updateDiscoverySelectedTools();
-            chatContext.inCredentialMode = true;
             const spec = chatContext.currentPlatform;
-            const input = document.getElementById('chat-input');
-            const missing = (spec.fields || []).filter(f => !chatContext.collectedConfig[f.key]);
+            const fields = spec.fields || [];
 
-            if (missing.length > 0) {
-                const firstF = missing[0];
-                appendBotMessage(`Great! Let's configure connection credentials for <strong>${spec.name}</strong>.<br><br>Please enter <strong>${firstF.label}</strong>:<br><em>${firstF.prompt || 'Enter value:'}</em>`);
-                input.type = firstF.secret ? 'password' : 'text';
-                input.placeholder = `Enter ${firstF.label}...`;
-                input.focus();
+            if (!fields.length) {
+                renderInteractiveValidationCard();
+                return;
+            }
+
+            // Render interactive credential form directly inside the chat
+            let formHtml = `
+                <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 10px; padding: 16px; margin: 10px 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <strong style="color: #60a5fa; font-size: 14px;">🔑 Configure Credentials for ${spec.name}</strong>
+                        <span style="font-size: 11px; color: #34d399; background: rgba(16,185,129,0.15); padding: 2px 8px; border-radius: 4px;">🔒 Secrets Masked</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+            `;
+
+            fields.forEach(f => {
+                const isSec = Boolean(f.secret);
+                const currentVal = chatContext.collectedConfig[f.key] || f.default || '';
+                formHtml += `
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #cbd5e1; margin-bottom: 4px; font-weight: 600;">
+                            ${f.label} ${f.required ? '<span style="color: #ef4444;">*</span>' : '<span style="color: var(--text-muted); font-size: 11px;">(optional)</span>'}
+                        </label>
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <input type="${isSec ? 'password' : 'text'}" id="cfld_${f.key}" class="chat-input" 
+                                style="width: 100%; font-family: ${isSec ? 'var(--font-mono)' : 'inherit'}; padding-right: ${isSec ? '36px' : '10px'};" 
+                                placeholder="${f.placeholder || f.label}" value="${currentVal}">
+                            ${isSec ? `<button type="button" style="position: absolute; right: 8px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 14px;" onclick="toggleInputVisibility('cfld_${f.key}', this)">👁️</button>` : ''}
+                        </div>
+                        ${f.prompt ? `<div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">${f.prompt}</div>` : ''}
+                    </div>
+                `;
+            });
+
+            formHtml += `
+                    </div>
+                    <div style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
+                        <button class="btn-confirm-action" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 8px 16px; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;" onclick="saveInteractiveCredentialsAndTest()">
+                            🧪 Run Live Pre-Flight Test & Validate
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            appendBotMessage(formHtml);
+        }
+
+        function toggleInputVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
             } else {
-                appendBotMessage(`🎉 All credentials ready for <strong>${spec.name}</strong>!`);
-                renderFinalBuildCard();
+                input.type = 'password';
+                btn.textContent = '👁️';
             }
         }
 
-        function renderFinalBuildCard() {
+        function saveInteractiveCredentialsAndTest() {
             const spec = chatContext.currentPlatform;
-            const html = `
-                <div style="background: var(--bg-surface); border: 1px solid var(--primary); border-radius: 8px; padding: 14px; margin-top: 8px;">
-                    <strong style="color: #60a5fa;">Ready to Deploy FastMCP Server:</strong>
-                    <div style="font-size: 13px; margin: 8px 0; color: var(--text-muted);">
-                        Platform: <strong>${spec.name}</strong><br>
-                        Credentials Target: <code>mcp_servers/${spec.id}/.env</code><br>
-                        Exposed Tools: <strong>${chatContext.selectedTools.length} tools</strong>
-                    </div>
-                    <button class="btn-confirm-action" onclick="executeBuild()">🚀 Generate Server Script & Save .env</button>
-                </div>
-            `;
-            appendBotMessage(html);
+            const fields = spec.fields || [];
+            let missingRequired = [];
+
+            fields.forEach(f => {
+                const el = document.getElementById(`cfld_${f.key}`);
+                if (el) {
+                    const v = el.value.trim();
+                    chatContext.collectedConfig[f.key] = v;
+                    if (f.required && !v) {
+                        missingRequired.push(f.label);
+                    }
+                }
+            });
+
+            if (missingRequired.length > 0) {
+                showToast(`⚠️ Please provide required fields: ${missingRequired.join(', ')}`, 'error');
+                return;
+            }
+
+            renderInteractiveValidationCard();
         }
 
-        async function executeBuild() {
+        async function renderInteractiveValidationCard() {
             const spec = chatContext.currentPlatform;
-            appendBotMessage(`⚙️ <strong>Step 1/2:</strong> Generating FastMCP server scripts and saving credentials into <code>mcp_servers/${spec.id}/.env</code>...`);
-            
-            const thinkingBubble = document.createElement('div');
-            thinkingBubble.className = 'chat-bubble thinking';
-            thinkingBubble.id = 'eval-thinking-bubble';
-            thinkingBubble.innerHTML = '🧪 <strong>Step 2/2:</strong> Mistral AI is performing <strong>automated self-evaluation</strong> against the upstream API...';
-            document.getElementById('chat-feed').appendChild(thinkingBubble);
-            document.getElementById('chat-feed').scrollTop = document.getElementById('chat-feed').scrollHeight;
+            const cardId = 'val_card_' + Math.random().toString(36).substr(2, 6);
+
+            let previewHtml = `
+                <div id="${cardId}" style="background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 10px; padding: 16px; margin: 10px 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                        <strong style="color: #60a5fa; font-size: 14px;">🧪 Pre-Flight Validation for ${spec.name}</strong>
+                        <span id="${cardId}_badge" style="font-size: 11px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                            Ready to Test
+                        </span>
+                    </div>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 12px; line-height: 1.5;">
+                        Platform: <strong style="color: #f1f5f9;">${spec.name}</strong> (${chatContext.selectedTools.length} tools enabled)<br>
+                        Destination: <code>mcp_servers/${spec.id}/server.py</code>
+                    </div>
+                    <div id="${cardId}_output" style="display: none; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px; margin-bottom: 12px; font-family: var(--font-mono); font-size: 11.5px; max-height: 140px; overflow-y: auto;">
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 8px;" id="${cardId}_actions">
+                        <button class="btn-outline" style="font-size: 12px; padding: 6px 12px;" onclick="confirmDiscoveryAndProceed()">✏️ Edit Credentials</button>
+                        <button class="btn-confirm-action" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; padding: 6px 14px; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;" onclick="runLivePreflightProbe('${cardId}')">
+                            🧪 Test Live Connection
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            appendBotMessage(previewHtml);
+        }
+
+        async function runLivePreflightProbe(cardId) {
+            const spec = chatContext.currentPlatform;
+            const badge = document.getElementById(`${cardId}_badge`);
+            const outEl = document.getElementById(`${cardId}_output`);
+            const actionsEl = document.getElementById(`${cardId}_actions`);
+
+            if (badge) {
+                badge.style.background = 'rgba(234, 179, 8, 0.15)';
+                badge.style.color = '#fbbf24';
+                badge.style.borderColor = 'rgba(234, 179, 8, 0.3)';
+                badge.innerHTML = '<span class="spinner" style="display: inline-block; width: 10px; height: 10px; border: 2px solid #fbbf24; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 4px;"></span> Probing Upstream API...';
+            }
+
+            if (outEl) {
+                outEl.style.display = 'block';
+                outEl.innerHTML = '<span style="color: #94a3b8;">Sending live authentication probe to upstream API...</span>';
+            }
+
+            try {
+                const res = await fetch('/api/servers/probe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        platform_id: spec.id,
+                        config: chatContext.collectedConfig,
+                        tools: spec.tools
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.passed) {
+                    if (badge) {
+                        badge.style.background = 'rgba(16, 185, 129, 0.15)';
+                        badge.style.color = '#34d399';
+                        badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+                        badge.innerHTML = '🟢 Probe Verified (HTTP 200 OK)';
+                    }
+                    if (outEl) {
+                        outEl.innerHTML = `<span style="color: #34d399; font-weight: 700;">✅ Live Probe Succeeded:</span><br><span style="color: #cbd5e1;">Tested probe: <code>${data.probe || 'health'}()</code></span><br><div style="color: #94a3b8; margin-top: 4px;">${data.preview || 'HTTP 200 OK'}</div>`;
+                    }
+                    if (actionsEl) {
+                        actionsEl.innerHTML = `
+                            <button class="btn-outline" style="font-size: 12px; padding: 6px 12px;" onclick="confirmDiscoveryAndProceed()">✏️ Edit Credentials</button>
+                            <button class="btn-confirm-action" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 8px 18px; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;" onclick="publishVerifiedServer('${cardId}')">
+                                🚀 Confirm & Publish Server to Gateway
+                            </button>
+                        `;
+                    }
+                } else {
+                    const errDetail = data.preview || data.error || 'Authentication / Connection failed.';
+                    if (badge) {
+                        badge.style.background = 'rgba(239, 68, 68, 0.15)';
+                        badge.style.color = '#f87171';
+                        badge.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                        badge.innerHTML = '❌ Probe Failed';
+                    }
+                    if (outEl) {
+                        outEl.innerHTML = `<span style="color: #f87171; font-weight: 700;">⚠️ Upstream API Check Failed:</span><br><div style="color: #fca5a5; margin-top: 4px;">${errDetail}</div>`;
+                    }
+                    if (actionsEl) {
+                        actionsEl.innerHTML = `
+                            <button class="btn-confirm-action" style="background: #2563eb; color: #fff; padding: 6px 14px; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;" onclick="confirmDiscoveryAndProceed()">
+                                🔄 Update Credentials & Retry
+                            </button>
+                            <button class="btn-outline" style="font-size: 12px; padding: 6px 12px;" onclick="publishVerifiedServer('${cardId}', true)">
+                                ⚠️ Force Publish Anyway
+                            </button>
+                        `;
+                    }
+                }
+            } catch (e) {
+                if (badge) {
+                    badge.style.background = 'rgba(239, 68, 68, 0.15)';
+                    badge.style.color = '#f87171';
+                    badge.innerHTML = '❌ Network Error';
+                }
+                if (outEl) {
+                    outEl.innerHTML = `<span style="color: #f87171;">Probe network exception: ${e.message || e}</span>`;
+                }
+            }
+        }
+
+        async function publishVerifiedServer(cardId, force = false) {
+            const spec = chatContext.currentPlatform;
+            const actionsEl = document.getElementById(`${cardId}_actions`);
+            if (actionsEl) {
+                actionsEl.innerHTML = '<span style="color: #60a5fa; font-size: 12px;"><span class="spinner" style="display: inline-block; width: 12px; height: 12px; border: 2px solid #60a5fa; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px;"></span> Generating FastMCP server & publishing to Gateway...</span>';
+            }
 
             try {
                 const res = await fetch('/api/build', {
@@ -3201,56 +3383,32 @@
                         platform_id: spec.id,
                         config: chatContext.collectedConfig,
                         tools: spec.tools,
-                        enabled_tools: chatContext.selectedTools
+                        enabled_tools: chatContext.selectedTools,
+                        skip_evaluation: force
                     })
                 });
 
                 const data = await res.json();
-                const tb = document.getElementById('eval-thinking-bubble');
-                if (tb) tb.remove();
 
                 if (res.ok && data.success) {
-                    const probeName = data.evaluation ? data.evaluation.probe : 'health';
                     appendBotMessage(`
                         <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success); border-radius: 8px; padding: 14px; margin-top: 8px;">
-                            <strong style="color: #34d399;">✅ Self-Evaluation Passed!</strong>
+                            <strong style="color: #34d399;">🎉 FastMCP Server Successfully Published!</strong>
                             <div style="font-size: 13px; margin: 8px 0; color: #cbd5e1;">
-                                • Live Probe: <code>${probeName}()</code> returned healthy response.<br>
+                                • Server ID: <code>${data.server.id}</code><br>
                                 • Platform: <strong>${data.server.name}</strong><br>
-                                • Exposed Tools: <strong>${data.server.tools.length} verified tools</strong><br>
-                                • Target Endpoint: <code>${window.location.origin}/mcp/${data.server.id}</code>
+                                • Active Tools: <strong>${data.server.tools.length} verified tools</strong><br>
+                                • Live Gateway Endpoint: <code>${window.location.origin}/mcp/${data.server.id}</code>
                             </div>
-                            <span style="font-size: 12px; color: #a7f3d0;">Server is verified healthy and registered to the live Gateway.</span>
+                            <span style="font-size: 12px; color: #a7f3d0;">Server is live and listening on the MCP Gateway!</span>
                         </div>
                     `);
-                    setTimeout(() => {
-                        closeBuilderModal();
-                        fetchServers();
-                    }, 1800);
-                } else if (data.evaluation_failed) {
-                    appendBotMessage(`
-                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 8px; padding: 14px; margin-top: 8px;">
-                            <strong style="color: #f87171;">⚠️ Self-Evaluation Pre-Flight Failed</strong>
-                            <div style="font-size: 13px; margin: 8px 0; color: #cbd5e1;">
-                                • <strong>Reason:</strong> ${data.error}<br>
-                                • <strong>Probe Tested:</strong> <code>${data.evaluation ? data.evaluation.probe : 'probe'}()</code><br>
-                                • <strong>Service Response:</strong> <pre style="background: rgba(0,0,0,0.4); padding: 6px; border-radius: 4px; font-size: 11px; margin-top: 4px; max-height: 100px; overflow-y: auto;">${data.evaluation ? data.evaluation.preview : ''}</pre>
-                            </div>
-                            <div style="font-size: 12px; color: #fca5a5; margin-bottom: 8px;">
-                                The server was <strong>NOT published to the gateway</strong> to prevent broken endpoints. Please adjust your credentials or URL below and retry.
-                            </div>
-                            <button class="btn-confirm-action" style="background: #2563eb;" onclick="confirmDiscoveryAndProceed()">
-                                🔄 Update Credentials & Re-evaluate
-                            </button>
-                        </div>
-                    `);
+                    fetchServers();
                 } else {
-                    appendBotMessage(`❌ Build Error: ${data.error || 'Unknown error'}`);
+                    appendBotMessage(`❌ Publication Error: ${data.error || 'Could not publish server.'}`);
                 }
             } catch (e) {
-                const tb = document.getElementById('eval-thinking-bubble');
-                if (tb) tb.remove();
-                appendBotMessage(`❌ Network error while building: ${e}`);
+                appendBotMessage(`❌ Error publishing server: ${e}`);
             }
         }
 

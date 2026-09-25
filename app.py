@@ -265,6 +265,7 @@ def get_credentials() -> Dict[str, str]:
             creds["instance"] = v_str
             creds["instance_name"] = v_str
             if "service-now.com" in v_str:
+                creds["base_url"] = v_str
         elif k_upper in ["PERSONAL_ACCESS_TOKEN", "PAT", "API_TOKEN", "TOKEN", "SECRET", "PASSWORD", "AUTH", "AUTH_HEADER", "API_KEY", "GITHUB_TOKEN", "GITHUB_PAT", "GH_TOKEN", "GH_PAT", "ACCESS_TOKEN"]:
             creds["auth_val"] = v_str
             creds["token"] = v_str
