@@ -19,7 +19,8 @@ from dotenv import load_dotenv
 
 from mistral_service import get_mistral_api_key, DEFAULT_MISTRAL_MODEL, MISTRAL_API_URL
 from gateway_manager import get_current_gateway_api_key
-from storage_config import BOTS_DIR, BASE_DIR
+from storage_config import BOTS_DIR, BASE_DIR, CONFIG_JSON_PATH
+from llm_adapter import llm_client
 
 logger = logging.getLogger("bot_engine")
 BOTS_BASE_DIR = BOTS_DIR
@@ -993,89 +994,285 @@ def generate_dynamic_execution_report(
     return report
 
 
-def execute_autonomous_agent_flow(bot: Dict[str, Any], trigger_reason: str, start_time: datetime) -> Dict[str, Any]:
-    """Autonomous agent execution flow for bots without static workflow steps."""
+def build_react_tools_for_bot(tools_required: List[str]) -> List[Dict[str, Any]]:
+    """
+    Constructs OpenAI/Universal function calling schemas dynamically for all tools
+    exposed by the bot's required MCP servers.
+    """
+    tools = []
+    server_registry = {}
+
+    for cfg_path in [CONFIG_JSON_PATH, os.path.join(BASE_DIR, "config.json"), os.path.join(BASE_DIR, "persistent_data", "config.json")]:
+        if os.path.exists(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    server_registry = data.get("servers", {})
+                    if server_registry:
+                        break
+            except Exception:
+                pass
+
+    active_servers = [t.lower() for t in tools_required] if tools_required else list(server_registry.keys())
+
+    for srv_id, srv_data in server_registry.items():
+        matched = False
+        for req in active_servers:
+            if req == srv_id.lower() or req in srv_id.lower() or srv_id.lower() in req:
+                matched = True
+                break
+        if not matched and tools_required:
+            continue
+
+        raw_tools = srv_data.get("tools") or srv_data.get("all_tools") or []
+        enabled_tools = srv_data.get("enabled_tools")
+
+        for t in raw_tools:
+            t_name = t.get("name")
+            if not t_name:
+                continue
+            if enabled_tools is not None and t_name not in enabled_tools:
+                continue
+
+            desc = t.get("description") or f"Execute {t_name} on {srv_id}"
+            params = t.get("params") or t.get("parameters") or {}
+            props = {}
+            req_list = []
+
+            if isinstance(params, dict):
+                for p_name, p_desc in params.items():
+                    p_str = str(p_desc)
+                    p_type = "string"
+                    if any(k in p_str.lower() for k in ["integer", "int", "number"]):
+                        p_type = "integer"
+                    elif any(k in p_str.lower() for k in ["boolean", "bool"]):
+                        p_type = "boolean"
+                    elif any(k in p_str.lower() for k in ["array", "list"]):
+                        p_type = "array"
+                    elif any(k in p_str.lower() for k in ["object", "dict"]):
+                        p_type = "object"
+                    props[p_name] = {
+                        "type": p_type,
+                        "description": p_str
+                    }
+                    if "required" in p_str.lower() and "optional" not in p_str.lower():
+                        req_list.append(p_name)
+            elif isinstance(params, list):
+                for p_item in params:
+                    if isinstance(p_item, str):
+                        props[p_item] = {"type": "string", "description": p_item}
+                    elif isinstance(p_item, dict) and "name" in p_item:
+                        pn = p_item["name"]
+                        props[pn] = {
+                            "type": p_item.get("type", "string"),
+                            "description": p_item.get("description", pn)
+                        }
+                        if p_item.get("required"):
+                            req_list.append(pn)
+
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": f"{srv_id}__{t_name}",
+                    "description": f"[{srv_id.upper()}] {desc}",
+                    "parameters": {
+                        "type": "object",
+                        "properties": props,
+                        "required": req_list
+                    }
+                }
+            })
+
+    # Add built-in AI RCA tool
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "built_in__generate_ai_rca",
+            "description": "[AI_RCA] Synthesizes an in-depth Root Cause Analysis (RCA) on error logs and source code using Mistral AI.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "error_log": {"type": "string", "description": "The exact stripped error log, build timeline, or stack trace"},
+                    "component_name": {"type": "string", "description": "Target application, pipeline, or service name"},
+                    "source_code": {"type": "string", "description": "Source code snippet or repository context"}
+                },
+                "required": ["error_log"]
+            }
+        }
+    })
+
+    return tools
+
+
+def _execute_deterministic_agent_fallback(
+    bot: Dict[str, Any],
+    trigger_reason: str,
+    start_time: datetime,
+    existing_steps: Optional[List[Dict[str, Any]]] = None,
+    existing_outputs: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    High-resilience deterministic agent fallback.
+    Executes complete end-to-end DevOps investigation, deduplication, incident creation,
+    AI RCA, and ServiceNow work note updates when LLM API keys are unavailable.
+    """
     bot_id = bot.get("id", "bot")
     bot_name = bot.get("name", "Autonomous Bot")
     instructions = bot.get("instructions", "")
     ctx = bot.get("context_config", {})
     tools_req = [t.lower() for t in bot.get("tools_required", [])]
-
-    steps_log = []
-    step_outputs = []
-    step_num = 1
     timestamp_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
-    # Discover and invoke primary inspection tool for each required server
-    for srv in tools_req:
-        target_tool = None
-        args = {}
+    steps_log = list(existing_steps or [])
+    step_outputs = list(existing_outputs or [])
+    overall_status = "healthy"
 
-        if "azure_devops" in srv:
-            target_tool = "list_builds"
-            args = {"project": ctx.get("project") or ctx.get("ado_repo") or "AI-POC", "top": 5}
-            step_action = f"Azure DevOps Build & Pipeline Inspection ({args['project']})"
-        elif "github" in srv:
-            target_tool = "list_repositories"
-            args = {}
-            step_action = "GitHub Repositories & Activity Sweep"
-        elif "azure_virtual_machines" in srv or "azure_vms" in srv:
-            target_tool = "list_vms"
-            args = {}
-            step_action = "Azure Virtual Machines Power State Sweep"
-        elif "azure_app_service" in srv or "app_service" in srv:
-            target_tool = "list_app_services"
-            args = {}
-            step_action = "Azure App Services Operational Health Sweep"
-        elif "servicenow" in srv:
-            target_tool = "query_incidents"
-            args = {"query": "active=true"}
-            step_action = "ServiceNow Incident Backlog & Triage Check"
-        elif "jenkins" in srv:
-            target_tool = "list_jobs"
-            args = {}
-            step_action = "Jenkins CI/CD Job Status Check"
+    def _add_step(name: str, server: str, tool: str, args: dict, action_desc: str):
+        s_num = len(steps_log) + 1
+        s_rec = {
+            "step": s_num,
+            "name": f"{action_desc} ({server}.{tool})" if server and tool else action_desc,
+            "status": "in_progress",
+            "details": f"Invoking {server}.{tool}..."
+        }
+        steps_log.append(s_rec)
+        t_res = execute_mcp_tool_on_gateway(server, tool, args)
+        r_out = t_res.get("output", "")
+        succ = t_res.get("success", False)
+        p_data = t_res.get("data") or parse_output_as_data(r_out, t_res.get("raw"))
+        if succ:
+            s_rec["status"] = "success"
+            s_rec["details"] = f"Success: {r_out[:180].replace(chr(10), ' ')}" if r_out else "Completed successfully."
+            s_rec["mcp_output"] = r_out[:1500]
+        else:
+            s_rec["status"] = "warning"
+            s_rec["details"] = f"Probe notice: {r_out[:180].replace(chr(10), ' ')}"
+            s_rec["mcp_output"] = r_out[:1500]
+        step_outputs.append({
+            "step": s_num,
+            "action": action_desc,
+            "server": server,
+            "tool": tool,
+            "success": succ,
+            "output": r_out
+        })
+        return t_res, p_data
 
-        if target_tool:
-            step_record = {
-                "step": step_num,
-                "name": step_action,
-                "status": "in_progress",
-                "details": f"Invoking {srv}.{target_tool}..."
-            }
-            steps_log.append(step_record)
+    # 1. CI/CD Pipeline Guardian Fallback (Azure DevOps + ServiceNow)
+    if any("azure_devops" in s for s in tools_req) or any("devops" in s for s in tools_req):
+        project = ctx.get("project") or ctx.get("ado_repo") or "AI-POC"
+        pipe_val = str(ctx.get("pipeline") or ctx.get("pipeline_name") or ctx.get("definitions") or "4").strip()
+        pipe_map = {
+            "springboot-app - app ci-cd": "4",
+            "springboot-app": "4",
+            "mcp-ai-portal - app ci-cd": "7",
+            "mcp-ai-portal": "7",
+            "ai-poc-ci-cd": "1",
+            "ai-poc": "1"
+        }
+        def_id = pipe_map.get(pipe_val.lower(), pipe_val if pipe_val.isdigit() else "4")
 
-            tool_res = execute_mcp_tool_on_gateway(srv, target_tool, args)
-            raw_out = tool_res.get("output", "")
-            is_success = tool_res.get("success", False)
+        # Step 1: List Builds
+        build_args = {"project": project, "definitions": def_id, "top": 5}
+        _, b_data = _add_step("List Builds", "azure_devops", "list_builds", build_args, "Azure DevOps Build & Pipeline Inspection")
 
+        builds = b_data.get("value") or b_data.get("builds") or [] if isinstance(b_data, dict) else []
+        latest_b = builds[0] if builds else {}
+        b_res = str(latest_b.get("result", "")).lower()
+        b_num = latest_b.get("buildNumber", "latest")
+        b_id = latest_b.get("id")
+
+        if b_res == "failed" or str(latest_b.get("status", "")).lower() == "failed":
+            overall_status = "incident_created"
+            logger.info(f"🚨 Fallback Engine: Detected failed build #{b_num} (ID: {b_id})")
+
+            # Step 2: Query ServiceNow for deduplication
+            existing_sys_id = None
+            if any("servicenow" in s for s in tools_req):
+                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"query": "active=true^short_descriptionLIKESpring Boot App Error"}, "ServiceNow Incident Deduplication Check")
+                active_incs = sn_query_data.get("result") or [] if isinstance(sn_query_data, dict) else []
+                if active_incs and isinstance(active_incs, list):
+                    existing_sys_id = active_incs[0].get("sys_id") or active_incs[0].get("number")
+                    logger.info(f"🛡️ Deduplication: Active ticket {active_incs[0].get('number')} found.")
+
+            # Step 3: Create Incident if not already existing
+            incident_id = existing_sys_id
+            if any("servicenow" in s for s in tools_req) and not existing_sys_id:
+                inc_args = {
+                    "short_description": "Spring Boot App Error",
+                    "description": f"Automated Alert: Azure DevOps Build #{b_num} in pipeline '{pipe_val}' failed. Autonomous SRE investigating root cause.",
+                    "urgency": "2",
+                    "impact": "2",
+                    "category": "Software"
+                }
+                _, inc_data = _add_step("Create Incident", "servicenow", "create_incident", inc_args, "ServiceNow Incident Creation")
+                res_obj = inc_data.get("result") if isinstance(inc_data, dict) else {}
+                if isinstance(res_obj, list) and res_obj:
+                    res_obj = res_obj[0]
+                incident_id = res_obj.get("sys_id") if isinstance(res_obj, dict) else None
+
+            # Step 4: Add Initial Work Note
+            if any("servicenow" in s for s in tools_req) and incident_id:
+                _add_step("Add Work Note", "servicenow", "add_work_notes", {
+                    "sys_id": incident_id,
+                    "work_notes": f"🤖 Autonomous SRE Agent is investigating failed build #{b_num} in project {project}."
+                }, "ServiceNow Work Notes Triage Update")
+
+            # Step 5: Deep Inspection (Build timeline & source code)
+            error_details = f"Azure DevOps Pipeline Build #{b_num} failed during compilation/test execution."
+            if b_id:
+                _, tl_data = _add_step("Get Build Timeline", "azure_devops", "get_build_timeline", {"project": project, "buildId": b_id}, "Azure DevOps Timeline & Log Trace Inspection")
+                if isinstance(tl_data, dict) and "records" in tl_data:
+                    err_recs = [r.get("name", "") + ": " + (r.get("errorCount", 0) and "Errors detected" or "") for r in tl_data["records"] if r.get("result") == "failed"]
+                    if err_recs:
+                        error_details += "\nFailed tasks: " + ", ".join(err_recs)
+
+            # Step 6: AI RCA Synthesis
+            s_num = len(steps_log) + 1
+            rca_res = generate_ai_rca(
+                error_details,
+                f"springboot-app (Build #{b_num})",
+                app_context="Repository: springboot-app | Branch: main | Maven Spring Boot 3.x Application"
+            )
+            rca_md = rca_res.get("formatted_rca_markdown", f"### Root Cause Analysis\n\nBuild #{b_num} failed in CI/CD pipeline.")
+            steps_log.append({
+                "step": s_num,
+                "name": f"AI Root Cause Analysis ({rca_res.get('incident_title', 'Root Cause Identified')})",
+                "status": "success",
+                "details": f"AI RCA Synthesized: {rca_res.get('incident_title')}",
+                "mcp_output": rca_md[:1500]
+            })
             step_outputs.append({
-                "step": step_num,
-                "action": step_action,
-                "server": srv,
-                "tool": target_tool,
-                "success": is_success,
-                "output": raw_out
+                "step": s_num,
+                "action": "AI Root Cause Analysis",
+                "server": "built_in",
+                "tool": "generate_ai_rca",
+                "success": True,
+                "output": rca_md
             })
 
-            if is_success:
-                step_record["status"] = "success"
-                step_record["details"] = f"Retrieved telemetry: {raw_out[:180].replace(chr(10), ' ')}" if raw_out else "Completed successfully."
-                step_record["mcp_output"] = raw_out[:1500]
-            else:
-                step_record["status"] = "warning"
-                step_record["details"] = f"Probe notice: {raw_out[:180].replace(chr(10), ' ')}"
-                step_record["mcp_output"] = raw_out[:1500]
+            # Step 7: Update ServiceNow with RCA
+            if any("servicenow" in s for s in tools_req) and incident_id:
+                _add_step("Update Incident with RCA", "servicenow", "add_work_notes", {
+                    "sys_id": incident_id,
+                    "work_notes": f"🔍 [AI Root Cause Analysis & Remediation Plan]\n\n{rca_md}"
+                }, "ServiceNow Incident Remediation Update")
 
-            step_num += 1
+        else:
+            overall_status = "healthy"
+            logger.info(f"🟢 Fallback Engine: Build #{b_num} is healthy ({b_res or 'succeeded'}). No incidents required.")
 
-    if not steps_log:
-        steps_log.append({
-            "step": 1,
-            "name": f"Goal Verification: '{bot_name}'",
-            "status": "success",
-            "details": "Execution complete. System state verified."
-        })
+    # 2. General Health Sweep Fallback (App Service / VMs / GitHub)
+    else:
+        for srv in tools_req:
+            if "azure_app_service" in srv:
+                _add_step("List App Services", "azure_app_service", "list_app_services", {}, "Azure App Services Health Sweep")
+            elif "azure_virtual_machines" in srv or "azure_vms" in srv:
+                _add_step("List Virtual Machines", "azure_virtual_machines", "list_vms", {}, "Azure Virtual Machines Power State Sweep")
+            elif "github" in srv:
+                _add_step("List Repositories", "github", "list_repositories", {}, "GitHub Repository Sweep")
+            elif "servicenow" in srv:
+                _add_step("Query Incidents", "servicenow", "query_incidents", {"query": "active=true"}, "ServiceNow Incident Backlog Check")
 
     end_time = datetime.now()
     duration_sec = round((end_time - start_time).total_seconds(), 2)
@@ -1086,15 +1283,15 @@ def execute_autonomous_agent_flow(bot: Dict[str, Any], trigger_reason: str, star
         steps_log=steps_log,
         step_outputs=step_outputs,
         context=ctx,
-        status="healthy"
+        status=overall_status
     )
 
-    summary_text = f"Bot '{bot_name}' completed {len(steps_log)} diagnostic steps successfully."
+    summary_text = f"Autonomous SRE Bot '{bot_name}' completed {len(steps_log)} diagnostic steps successfully."
 
     run_record = {
         "timestamp": timestamp_str,
         "duration_seconds": duration_sec,
-        "status": "healthy",
+        "status": overall_status,
         "trigger": trigger_reason,
         "summary": summary_text,
         "report_markdown": report_markdown,
@@ -1103,11 +1300,263 @@ def execute_autonomous_agent_flow(bot: Dict[str, Any], trigger_reason: str, star
     bot_registry.append_run_log(bot_id, run_record)
     return {
         "success": True,
-        "status": "healthy",
+        "status": overall_status,
         "summary": summary_text,
         "report_markdown": report_markdown,
         "run_record": run_record
     }
+
+
+def execute_react_agent_flow(bot: Dict[str, Any], trigger_reason: str, start_time: datetime) -> Dict[str, Any]:
+    """
+    True Autonomous ReAct (Reason + Act) Agent Loop.
+    Converts exposed MCP servers to standard Function Calling schemas and lets the LLM
+    autonomously observe live environment state, evaluate health/anomalies, deduplicate ServiceNow tickets,
+    inspect code/logs, generate AI RCAs, and execute remediation actions.
+    """
+    bot_id = bot.get("id", "bot")
+    bot_name = bot.get("name", "Autonomous Bot")
+    instructions = bot.get("instructions", "")
+    ctx = bot.get("context_config", {})
+    tools_req = [t.lower() for t in bot.get("tools_required", [])]
+    timestamp_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    tools = build_react_tools_for_bot(tools_req)
+
+    system_prompt = f"""You are an Autonomous Senior DevOps SRE and Incident Management Agent.
+Your mission is governed by the following instructions and environment context:
+
+MISSION INSTRUCTIONS:
+{instructions}
+
+ENVIRONMENT CONTEXT:
+{json.dumps(ctx, indent=2)}
+
+OPERATIONAL RULES:
+1. Gating & Health Check:
+   - First inspect the primary telemetry (e.g. list builds, get app service logs, or check VM status).
+   - If the build status is 'succeeded' / 'completed' or no fatal errors exist, report that the system is fully healthy and operational.
+   - DO NOT create any tickets in ServiceNow when the system is healthy.
+2. Anomaly / Failure Workflow:
+   - If a build has failed or an error is detected:
+     a. Check active incidents in ServiceNow (servicenow__query_incidents) to avoid duplicates.
+     b. If no active incident exists for this failure, create a ServiceNow incident (servicenow__create_incident) with short_description="Spring Boot App Error" (or matching instructions).
+     c. Add an initial work note (servicenow__add_work_notes) saying 'AI is investigating the issue'.
+     d. Deeply inspect the build timeline, error logs, and repository source code (azure_devops__get_build_timeline or azure_devops__get_file_content).
+     e. Synthesize an in-depth Root Cause Analysis (built_in__generate_ai_rca).
+     f. Update the ServiceNow incident with the RCA response via servicenow__add_work_notes.
+3. Conclude with a concise technical summary once all actions are completed."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Begin autonomous inspection and incident triage for '{bot_name}'. Context: {json.dumps(ctx)}"}
+    ]
+
+    steps_log = []
+    step_outputs = []
+    overall_status = "healthy"
+    max_turns = 8
+    turn = 0
+    final_summary = ""
+
+    try:
+        while turn < max_turns:
+            turn += 1
+            logger.info(f"🤖 [ReAct Agent Turn {turn}/{max_turns}] Bot '{bot_name}' reasoning...")
+            
+            try:
+                llm_response = llm_client.chat_completion(
+                    messages=messages,
+                    tools=tools if tools else None,
+                    temperature=0.1,
+                    max_tokens=2048,
+                    timeout=30
+                )
+            except Exception as e_llm:
+                logger.warning(f"Universal LLM call in ReAct loop unavailable or errored ({e_llm}). Transitioning smoothly to dynamic deterministic agent flow...")
+                return _execute_deterministic_agent_fallback(bot, trigger_reason, start_time, steps_log, step_outputs)
+
+            content = llm_response.get("content", "")
+            tool_calls = llm_response.get("tool_calls", [])
+
+            if not tool_calls:
+                final_summary = content
+                step_record = {
+                    "step": len(steps_log) + 1,
+                    "name": "Autonomous Agent Summary & Mission Complete",
+                    "status": "success",
+                    "details": (content[:160] + "...") if len(content) > 160 else (content or "Autonomous evaluation complete.")
+                }
+                steps_log.append(step_record)
+                break
+
+            # Append assistant message with tool calls
+            messages.append({
+                "role": "assistant",
+                "content": content or "",
+                "tool_calls": tool_calls
+            })
+
+            # Process tool calls
+            for tc in tool_calls:
+                call_id = tc.get("id") or f"call_{len(steps_log)+1}"
+                func_info = tc.get("function", {})
+                func_name = func_info.get("name", "")
+                raw_arguments = func_info.get("arguments", "{}")
+
+                if isinstance(raw_arguments, str):
+                    try:
+                        args = json.loads(raw_arguments)
+                    except Exception:
+                        args = {}
+                else:
+                    args = dict(raw_arguments or {})
+
+                step_num = len(steps_log) + 1
+
+                # Handle built-in tools
+                if func_name == "built_in__generate_ai_rca":
+                    err_log = args.get("error_log", "")
+                    comp_name = args.get("component_name", bot_name)
+                    src = args.get("source_code", "")
+                    rca_res = generate_ai_rca(str(err_log), comp_name, app_context=str(src))
+                    rca_text = rca_res.get("formatted_rca_markdown", "")
+
+                    step_record = {
+                        "step": step_num,
+                        "name": f"AI Root Cause Analysis ({rca_res.get('incident_title', 'RCA')})",
+                        "status": "success",
+                        "details": f"Synthesized AI RCA: {rca_res.get('incident_title')}",
+                        "mcp_output": rca_text[:1500]
+                    }
+                    steps_log.append(step_record)
+                    step_outputs.append({
+                        "step": step_num,
+                        "action": "AI Root Cause Analysis",
+                        "server": "built_in",
+                        "tool": "generate_ai_rca",
+                        "success": True,
+                        "output": rca_text
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": func_name,
+                        "content": json.dumps(rca_res)
+                    })
+                    continue
+
+                # Handle MCP Server tools (e.g. azure_devops__list_builds)
+                parts = func_name.split("__", 1)
+                srv_id = parts[0]
+                tool_name = parts[1] if len(parts) > 1 else func_name
+
+                # Auto-inject context if missing
+                if srv_id == "azure_devops":
+                    if "project" not in args and ctx.get("project"):
+                        args["project"] = ctx["project"]
+                    # Map pipeline name to definition ID
+                    pipe_val = str(args.get("definitions") or args.get("pipeline") or ctx.get("pipeline") or "").strip()
+                    if pipe_val:
+                        pipe_map = {
+                            "springboot-app - app ci-cd": "4",
+                            "springboot-app": "4",
+                            "mcp-ai-portal - app ci-cd": "7",
+                            "mcp-ai-portal": "7",
+                            "ai-poc-ci-cd": "1",
+                            "ai-poc": "1"
+                        }
+                        if pipe_val.isdigit():
+                            args["definitions"] = pipe_val
+                        elif pipe_val.lower() in pipe_map:
+                            args["definitions"] = pipe_map[pipe_val.lower()]
+
+                step_record = {
+                    "step": step_num,
+                    "name": f"{srv_id}.{tool_name}",
+                    "status": "in_progress",
+                    "details": f"Invoking {srv_id}.{tool_name}..."
+                }
+                steps_log.append(step_record)
+
+                tool_res = execute_mcp_tool_on_gateway(srv_id, tool_name, args)
+                raw_out = tool_res.get("output", "")
+                is_success = tool_res.get("success", False)
+                parsed_data = tool_res.get("data") or parse_output_as_data(raw_out, tool_res.get("raw"))
+
+                if is_success:
+                    step_record["status"] = "success"
+                    step_record["details"] = f"Success: {raw_out[:180].replace(chr(10), ' ')}" if raw_out else "Completed successfully."
+                    step_record["mcp_output"] = raw_out[:1500]
+                else:
+                    step_record["status"] = "warning"
+                    step_record["details"] = f"Probe notice: {raw_out[:180].replace(chr(10), ' ')}"
+                    step_record["mcp_output"] = raw_out[:1500]
+
+                # Status tracking
+                if tool_name == "create_incident" and is_success:
+                    overall_status = "incident_created"
+                elif tool_name == "list_builds" and isinstance(parsed_data, dict):
+                    builds = parsed_data.get("value") or parsed_data.get("builds") or []
+                    if builds and (builds[0].get("result") == "failed" or builds[0].get("status") == "failed"):
+                        overall_status = "incident_created"
+
+                step_outputs.append({
+                    "step": step_num,
+                    "action": f"{srv_id}.{tool_name}",
+                    "server": srv_id,
+                    "tool": tool_name,
+                    "success": is_success,
+                    "output": raw_out
+                })
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": func_name,
+                    "content": raw_out[:3500]
+                })
+
+    except Exception as e_outer:
+        logger.error(f"Error in ReAct agent execution: {e_outer}")
+        return _execute_deterministic_agent_fallback(bot, trigger_reason, start_time, steps_log, step_outputs)
+
+    end_time = datetime.now()
+    duration_sec = round((end_time - start_time).total_seconds(), 2)
+
+    report_markdown = generate_dynamic_execution_report(
+        bot_name=bot_name,
+        instructions=instructions,
+        steps_log=steps_log,
+        step_outputs=step_outputs,
+        context=ctx,
+        status=overall_status
+    )
+
+    summary_text = final_summary or f"Autonomous Agent '{bot_name}' executed {len(steps_log)} steps successfully across {', '.join(tools_req) if tools_req else 'configured tools'}."
+
+    run_record = {
+        "timestamp": timestamp_str,
+        "duration_seconds": duration_sec,
+        "status": overall_status,
+        "trigger": trigger_reason,
+        "summary": summary_text,
+        "report_markdown": report_markdown,
+        "steps": steps_log
+    }
+    bot_registry.append_run_log(bot_id, run_record)
+    return {
+        "success": True,
+        "status": overall_status,
+        "summary": summary_text,
+        "report_markdown": report_markdown,
+        "run_record": run_record
+    }
+
+
+def execute_autonomous_agent_flow(bot: Dict[str, Any], trigger_reason: str, start_time: datetime) -> Dict[str, Any]:
+    """Routes to the Autonomous ReAct Agent Loop."""
+    return execute_react_agent_flow(bot, trigger_reason, start_time)
 
 
 # Global Concurrency Locks: Prevents overlapping workflow runs for the same bot
@@ -1219,10 +1668,16 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                             "run_record": run_record
                         }
         except Exception as e:
-            logger.warning(f"Notice executing custom workflow.py for bot {bot_id} ({e}), falling back to dynamic workflow step dispatcher...")
+            logger.warning(f"Notice executing custom workflow.py for bot {bot_id} ({e}), falling back to ReAct agent flow...")
 
     # =========================================================================
-    # Strategy 2: Dynamic Workflow Steps Execution Engine
+    # Strategy 2: Dynamic Autonomous ReAct Agent Loop (Tool-Calling & Reasoning)
+    # =========================================================================
+    if not workflow_steps or bot.get("mode") == "autonomous":
+        return execute_react_agent_flow(bot, trigger_reason, start_time)
+
+    # =========================================================================
+    # Strategy 3: Dynamic Workflow Steps Execution Engine (if static steps specified)
     # =========================================================================
     if workflow_steps and isinstance(workflow_steps, list):
         steps_log = []
@@ -1313,7 +1768,6 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
 
             # 5. Invoke MCP Tool via Gateway
             if step_server and step_tool:
-                # Resolve Azure DevOps pipeline name to definitions ID if specified
                 if step_server == "azure_devops" and step_tool == "list_builds":
                     pipe_val = str(step_args.get("pipeline") or step_args.get("pipeline_name") or step_args.get("definition") or "").strip()
                     if pipe_val and "definitions" not in step_args:
@@ -1339,14 +1793,12 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                 is_success = tool_res.get("success", False)
                 parsed_data = tool_res.get("data") or parse_output_as_data(raw_out, tool_res.get("raw"))
 
-                # Save to execution state
                 execution_state[f"step_{step_num}"] = {
                     "output": parsed_data,
                     "raw": raw_out,
                     "success": is_success
                 }
 
-                # Tool-specific state enrichments:
                 if step_tool == "list_builds" and isinstance(parsed_data, dict):
                     builds_list = parsed_data.get("value") or parsed_data.get("builds") or []
                     if builds_list and isinstance(builds_list, list):
@@ -1439,10 +1891,8 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
             "run_record": run_record
         }
 
-    # =========================================================================
-    # Strategy 3: Autonomous Dynamic Agent Execution (Zero Hardcoding)
-    # =========================================================================
-    return execute_autonomous_agent_flow(bot, trigger_reason, start_time)
+    # Default fallback
+    return execute_react_agent_flow(bot, trigger_reason, start_time)
 
 
 def synthesize_bot_with_mistral(prompt: str, servers: Dict[str, Any]) -> Dict[str, Any]:
@@ -1455,4 +1905,5 @@ def synthesize_bot_with_mistral(prompt: str, servers: Dict[str, Any]) -> Dict[st
         "context_config": {},
         "tools_required": list(servers.keys())[:3] if servers else []
     }
+
 
