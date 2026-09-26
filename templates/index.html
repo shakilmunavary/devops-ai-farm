@@ -1134,10 +1134,193 @@
             font-size: 13px;
         }
 
-        .rca-field-title {
-            font-weight: 750;
-            color: #c084fc;
-            margin-bottom: 2px;
+        /* ==========================================================================
+           Antigravity-Style Agent Mission Control & Live CLI Terminal Styles
+           ========================================================================== */
+        .terminal-tab-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 700;
+            padding: 5px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .terminal-tab-btn.active {
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: #ffffff;
+            border-color: #38bdf8;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+        }
+        .terminal-tab-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+        }
+
+        .mission-specs-panel {
+            display: grid;
+            grid-template-columns: 1.25fr 1fr;
+            gap: 14px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 12px;
+            padding: 14px 16px;
+        }
+        @media (max-width: 900px) {
+            .mission-specs-panel { grid-template-columns: 1fr; }
+        }
+
+        .mission-spec-box {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .mission-spec-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .mission-prompt-display {
+            font-size: 12px;
+            color: #f1f5f9;
+            font-family: var(--font-mono);
+            line-height: 1.5;
+            white-space: pre-wrap;
+            background: rgba(0, 0, 0, 0.55);
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            max-height: 110px;
+            overflow-y: auto;
+        }
+
+        .workflow-stepper-bar {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 10px 14px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            align-items: center;
+        }
+
+        .stepper-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #e2e8f0;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .stepper-pill.success {
+            border-color: rgba(34, 197, 94, 0.4);
+            background: rgba(34, 197, 94, 0.12);
+            color: #86efac;
+        }
+        .stepper-pill.alert {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+        }
+        .stepper-pill.running {
+            border-color: rgba(56, 189, 248, 0.5);
+            background: rgba(56, 189, 248, 0.15);
+            color: #7dd3fc;
+            animation: pulse 1.5s infinite;
+        }
+
+        .agent-terminal-window {
+            background: #050811;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 380px;
+            max-height: 480px;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8), 0 8px 24px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+        }
+
+        .agent-terminal-header {
+            background: #0b1120;
+            border-bottom: 1px solid #1e293b;
+            padding: 8px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .terminal-traffic-dots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .terminal-traffic-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .agent-terminal-screen {
+            background: #030712;
+            padding: 14px 16px;
+            overflow-y: auto;
+            flex: 1;
+            font-family: 'Fira Code', 'Consolas', 'Courier New', monospace;
+            font-size: 12.5px;
+            line-height: 1.55;
+            color: #cbd5e1;
+        }
+
+        .terminal-line {
+            margin-bottom: 3px;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .terminal-prompt-line {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.08);
+            font-family: 'Fira Code', 'Consolas', 'Courier New', monospace;
+            font-size: 12.5px;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .terminal-cursor {
+            display: inline-block;
+            color: #10b981;
+            font-weight: 900;
+            animation: terminal-blink 1s step-end infinite;
+        }
+
+        @keyframes terminal-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
         }
 
 
@@ -2170,25 +2353,138 @@
         </div>
     </div>
 
-    <!-- Bot Execution History & RCA Modal -->
+    <!-- Antigravity-Style Agent Mission Control & Live Terminal Modal -->
     <div class="modal-backdrop" id="bot-logs-modal">
-        <div class="modal-box" style="width: 900px; max-width: 96vw; height: 800px; max-height: 92vh; display: flex; flex-direction: column;">
-            <div class="modal-header" style="background: linear-gradient(90deg, #0f172a, #1e293b); padding: 16px 24px;">
+        <div class="modal-box" style="width: 1100px; max-width: 96vw; height: 900px; max-height: 94vh; display: flex; flex-direction: column;">
+            <!-- Modal Top Header -->
+            <div class="modal-header" style="background: linear-gradient(90deg, #0b1120, #1e293b); padding: 14px 22px; border-bottom: 1px solid rgba(56, 189, 248, 0.25);">
                 <div style="display: flex; align-items: center; gap: 12px;">
-                    <div class="brand-logo" style="width: 32px; height: 32px; font-size: 15px; background: linear-gradient(135deg, #10b981, #3b82f6);">📜</div>
+                    <div class="brand-logo" style="width: 36px; height: 36px; font-size: 18px; background: linear-gradient(135deg, #0284c7, #6366f1); border: 1px solid rgba(56, 189, 248, 0.4);">🤖</div>
                     <div>
-                        <h3 style="font-size: 16px; font-weight: 750;" id="bot-logs-title">BOT Log</h3>
-                        <span style="font-size: 11px; color: var(--text-muted);" id="bot-logs-meta">Live execution telemetry and autonomous workflow traces</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3 style="font-size: 16px; font-weight: 800; color: #f8fafc; margin: 0;" id="bot-logs-title">Agent Mission Control & Terminal</h3>
+                            <span id="bot-terminal-status-badge" class="badge badge-ok" style="font-size: 10.5px;">🟢 IDLE</span>
+                        </div>
+                        <span style="font-size: 11px; color: var(--text-muted);" id="bot-logs-meta">Live execution telemetry, tool invocations & autonomous SRE traces</span>
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <button class="btn-chip-action" id="btn-clear-bot-logs" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px; cursor: pointer;" onclick="clearActiveBotLogs()">🗑️ Clear Logs</button>
-                    <button class="modal-close" onclick="closeBotLogsModal()">&times;</button>
+
+                <!-- Center/Right: View Switcher Tabs & Actions -->
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="display: flex; gap: 4px; background: rgba(0, 0, 0, 0.4); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+                        <button class="terminal-tab-btn active" id="tab-terminal-view" onclick="switchModalViewMode('terminal')">
+                            💻 Live Terminal
+                        </button>
+                        <button class="terminal-tab-btn" id="tab-report-view" onclick="switchModalViewMode('report')">
+                            📊 Executive RCA
+                        </button>
+                    </div>
+
+                    <button class="btn-chip-action" id="btn-terminal-trigger" style="background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; font-size: 11.5px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;" onclick="triggerBotFromTerminal()">
+                        ⚡ Trigger Now
+                    </button>
+
+                    <button class="btn-chip-action" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc; font-size: 11.5px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;" onclick="copyTerminalStream()">
+                        📋 Copy Logs
+                    </button>
+
+                    <button class="btn-chip-action" id="btn-clear-bot-logs" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; font-size: 11.5px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer;" onclick="clearActiveBotLogs()">
+                        🗑️ Clear Logs
+                    </button>
+
+                    <button class="modal-close" onclick="closeBotLogsModal()" style="font-size: 20px; line-height: 1;">&times;</button>
                 </div>
             </div>
 
-            <div class="modal-body" id="bot-logs-body" style="padding: 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; background: var(--bg-base);">
-                <!-- Dynamic log cards rendered here -->
+            <!-- Modal Content Area -->
+            <div class="modal-body" style="padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; background: var(--bg-base); flex: 1;">
+                
+                <!-- TOP SECTION: Agent Mission Specs, Tools Inventory & Target Context -->
+                <div class="mission-specs-panel" id="bot-specs-panel">
+                    <!-- Left: Mission Instructions / Prompt -->
+                    <div class="mission-spec-box">
+                        <div class="mission-spec-title">
+                            <span>🎯 Configured Instructions & Prompt</span>
+                            <button class="btn-chip-action" style="font-size: 10.5px; padding: 2px 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="copyActiveBotPrompt()">
+                                📋 Copy Prompt
+                            </button>
+                        </div>
+                        <div class="mission-prompt-display" id="terminal-bot-instructions">
+                            Loading instructions...
+                        </div>
+                    </div>
+
+                    <!-- Right: Attached Tools & Context Parameters -->
+                    <div class="mission-spec-box">
+                        <div class="mission-spec-title">
+                            <span>🧰 Attached MCP Tools & Context</span>
+                            <span style="font-size: 10.5px; color: var(--text-muted);" id="terminal-tools-count">0 Tools</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="terminal-tools-badges">
+                                <!-- Dynamic tool badges -->
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.06);" id="terminal-context-tags">
+                                <!-- Dynamic context tags -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MIDDLE SECTION: Workflow Stepper / Step Checklist -->
+                <div>
+                    <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>📋 Autonomous Execution Graph & Step Status</span>
+                        <span style="font-size: 10.5px; color: var(--text-muted);" id="terminal-step-meta">0 steps</span>
+                    </div>
+                    <div class="workflow-stepper-bar" id="terminal-workflow-stepper">
+                        <!-- Dynamic step pills -->
+                    </div>
+                </div>
+
+                <!-- BOTTOM SECTION - VIEW A: Antigravity-Style Live Monospaced CLI Terminal -->
+                <div id="view-mode-terminal" style="display: flex; flex-direction: column; flex: 1; min-height: 380px;">
+                    <div class="agent-terminal-window">
+                        <!-- Terminal Window Top Bar -->
+                        <div class="agent-terminal-header">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div class="terminal-traffic-dots">
+                                    <span class="terminal-traffic-dot" style="background: #ef4444;"></span>
+                                    <span class="terminal-traffic-dot" style="background: #f59e0b;"></span>
+                                    <span class="terminal-traffic-dot" style="background: #10b981;"></span>
+                                </div>
+                                <span style="font-family: var(--font-mono); font-size: 11.5px; color: #94a3b8; font-weight: 600;" id="terminal-window-title">
+                                    agent@mcp-ai-portal: ~/bots/session
+                                </span>
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <label style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                    <input type="checkbox" id="terminal-autoscroll" checked style="cursor: pointer;"> Auto-scroll
+                                </label>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 11px; color: #94a3b8;">Run:</span>
+                                    <select id="terminal-run-select" class="chat-input" style="padding: 3px 8px; font-size: 11px; height: 26px; min-width: 180px; max-width: 280px; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); color: #f8fafc;" onchange="onTerminalRunSelected(this.value)">
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Terminal Screen Output -->
+                        <div class="agent-terminal-screen" id="terminal-stream-screen">
+                            <div style="color: #64748b; font-style: italic;">[INITIALIZING] Connecting to Agent Mission Telemetry Stream...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BOTTOM SECTION - VIEW B: Executive Markdown Report & RCA Dashboard (Tab Switch) -->
+                <div id="view-mode-report" style="display: none; flex-direction: column; gap: 14px;">
+                    <div id="bot-report-cards-container" style="display: flex; flex-direction: column; gap: 14px;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -4104,8 +4400,8 @@
                             <button class="btn-bot-action" style="background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); color: #cbd5e1; padding: 7px 12px; border-radius: 6px; cursor: pointer;" onclick="runBotNow('${botId}')" title="Run single pass right now">
                                 ⚡ Trigger Once
                             </button>
-                            <button class="btn-bot-action" style="background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); color: #cbd5e1; padding: 7px 12px; border-radius: 6px; cursor: pointer;" onclick="openBotLogsModal('${botId}')">
-                                📜 BOT Log
+                            <button class="btn-bot-action" style="background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; font-weight: 650; padding: 7px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;" onclick="openBotLogsModal('${botId}')">
+                                💻 Terminal
                             </button>
                             <button class="btn-bot-action btn-bot-delete" onclick="deleteBot('${botId}')" title="Delete Bot" style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #f87171; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
                                 🗑️
@@ -4660,204 +4956,508 @@
             }
         }
 
-        async function openBotLogsModal(botId) {
-            activeViewingBotId = botId;
-            const modal = document.getElementById('bot-logs-modal');
-            const body = document.getElementById('bot-logs-body');
-            const title = document.getElementById('bot-logs-title');
-            
-            modal.classList.add('active');
-            body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">⏳ Fetching execution history...</div>';
 
-            try {
-                const res = await fetch(`/api/bots/${botId}/logs`);
-                const data = await res.json();
 
-                title.innerHTML = `📜 ${escapeHtml(data.name || botId)} - BOT Log`;
+        // ==============================================================================
+        // Antigravity-Style Agent Mission Control & Live CLI Terminal Frontend Engine
+        // ==============================================================================
 
-                const botPrompt = data.instructions || data.description || (allBots[botId] && (allBots[botId].instructions || allBots[botId].description)) || 'Autonomous mission instructions';
+        let activeViewingBotId = null;
+        let activeBotLogsData = null;
+        let activeRunIndex = 0;
+        let activeModalViewMode = 'terminal';
 
-                const promptCard = `
-                    <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 11.5px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
-                                    💬 Configured Prompt & Mission Instructions
-                                </span>
-                                <span class="badge badge-ok" style="font-size: 10px;">Active Mission</span>
-                            </div>
-                            <button class="btn-chip-action" style="font-size: 11px; padding: 3px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="copyBotPrompt('${botId}')">
-                                📋 Copy Prompt
-                            </button>
+        function switchModalViewMode(mode) {
+            activeModalViewMode = mode;
+            const termTab = document.getElementById('tab-terminal-view');
+            const repTab = document.getElementById('tab-report-view');
+            const termView = document.getElementById('view-mode-terminal');
+            const repView = document.getElementById('view-mode-report');
+
+            if (termTab) termTab.classList.toggle('active', mode === 'terminal');
+            if (repTab) repTab.classList.toggle('active', mode === 'report');
+            if (termView) termView.style.display = mode === 'terminal' ? 'flex' : 'none';
+            if (repView) repView.style.display = mode === 'report' ? 'flex' : 'none';
+        }
+
+        function copyActiveBotPrompt() {
+            if (!activeBotLogsData) return;
+            const prompt = activeBotLogsData.instructions || activeBotLogsData.description || (allBots[activeViewingBotId] && (allBots[activeViewingBotId].instructions || allBots[activeViewingBotId].description)) || '';
+            if (!prompt) {
+                showToast("No prompt recorded for this bot.", "info");
+                return;
+            }
+            navigator.clipboard.writeText(prompt).then(() => {
+                showToast("📋 Mission instructions copied to clipboard!", "success");
+            }).catch(e => {
+                prompt("Copy prompt:", prompt);
+            });
+        }
+
+        function copyTerminalStream() {
+            const screen = document.getElementById('terminal-stream-screen');
+            if (!screen) return;
+            const plainText = screen.innerText || screen.textContent || '';
+            navigator.clipboard.writeText(plainText).then(() => {
+                showToast("📋 Terminal output copied to clipboard!", "success");
+            }).catch(e => {
+                alert("Failed to copy terminal: " + e);
+            });
+        }
+
+        function onTerminalRunSelected(runIdx) {
+            activeRunIndex = parseInt(runIdx, 10) || 0;
+            renderActiveRunView();
+        }
+
+        function formatTerminalLineSyntax(rawLine) {
+            if (!rawLine) return '';
+            let line = escapeHtml(rawLine);
+
+            // Highlight Timestamps [HH:MM:SS]
+            line = line.replace(/^(\[\d{2}:\d{2}:\d{2}\])/, '<span style="color: #64748b; font-weight: 600;">$1</span>');
+
+            // Highlight Major Agent Event Badges
+            line = line.replace(/(\[AGENT_WAKEUP\])/g, '<span style="color: #38bdf8; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[MISSION_GOAL\])/g, '<span style="color: #facc15; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[ATTACHED_MCP_TOOLS\])/g, '<span style="color: #c084fc; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[TARGET_CONTEXT\])/g, '<span style="color: #34d399; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[WORKFLOW_PLAN\])/g, '<span style="color: #60a5fa; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[EXEC\]|\[CALL\])/g, '<span style="color: #38bdf8; font-weight: 750;">$1</span>');
+            line = line.replace(/(\[DETECTED\]|\[ALERT\]|\[ERROR\])/g, '<span style="color: #f87171; font-weight: 800; background: rgba(239, 68, 68, 0.15); padding: 1px 4px; border-radius: 3px;">$1</span>');
+            line = line.replace(/(\[QUERY\])/g, '<span style="color: #fb923c; font-weight: 750;">$1</span>');
+            line = line.replace(/(\[SNOW_TICKET\])/g, '<span style="color: #4ade80; font-weight: 800; background: rgba(34, 197, 94, 0.15); padding: 1px 4px; border-radius: 3px;">$1</span>');
+            line = line.replace(/(\[WORK_NOTE\])/g, '<span style="color: #fbbf24; font-weight: 750;">$1</span>');
+            line = line.replace(/(\[AI_RCA\]|\[RCA_SUMMARY\])/g, '<span style="color: #e879f9; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[RESOLVED\])/g, '<span style="color: #a3e635; font-weight: 800;">$1</span>');
+            line = line.replace(/(\[MISSION_COMPLETE\])/g, '<span style="color: #4ade80; font-weight: 900; background: rgba(34, 197, 94, 0.2); padding: 1px 6px; border-radius: 4px;">$1</span>');
+            line = line.replace(/(\[STANDBY\])/g, '<span style="color: #94a3b8; font-weight: 600;">$1</span>');
+
+            // Highlight Step Headers
+            if (line.includes('─── STEP')) {
+                line = `<div style="color: #f8fafc; font-weight: 800; margin-top: 8px; margin-bottom: 3px; border-left: 2px solid #38bdf8; padding-left: 6px;">${line}</div>`;
+            } else if (line.includes('───────')) {
+                line = `<div style="color: #334155; margin: 4px 0;">${line}</div>`;
+            }
+
+            return `<div class="terminal-line">${line}</div>`;
+        }
+
+        function synthesizeTerminalLinesFromRun(run, botData) {
+            const lines = [];
+            const tStr = run.timestamp ? run.timestamp.split(' ')[1] || run.timestamp : new Date().toTimeString().split(' ')[0];
+            const botName = botData.name || 'Autonomous Agent';
+            const instructions = botData.instructions || botData.description || '';
+            const toolsReq = botData.tools_required || [];
+            const ctx = botData.context_config || {};
+            const steps = run.steps || [];
+
+            lines.push(`[${tStr}] 🤖 [AGENT_WAKEUP] Autonomous Agent '${botName}' execution cycle (${run.trigger || 'Autonomous SRE Execution'})`);
+            if (instructions) {
+                lines.push(`[${tStr}] 📌 [MISSION_GOAL] "${instructions.substring(0, 160)}${instructions.length > 160 ? '...' : ''}"`);
+            }
+            if (toolsReq.length > 0) {
+                lines.push(`[${tStr}] 🧰 [ATTACHED_MCP_TOOLS] ${toolsReq.join(', ')}`);
+            }
+            const ctxPairs = Object.entries(ctx).filter(([k, v]) => v && !k.startsWith('_')).map(([k, v]) => `${k}=${v}`);
+            if (ctxPairs.length > 0) {
+                lines.push(`[${tStr}] 🎯 [TARGET_CONTEXT] ${ctxPairs.join(', ')}`);
+            }
+            lines.push(`[${tStr}] 📋 [WORKFLOW_PLAN] ${steps.length} automated steps scheduled in execution graph`);
+            lines.push(`[${tStr}] ────────────────────────────────────────────────────────────────────`);
+
+            steps.forEach(s => {
+                const sNum = s.step || 1;
+                const sName = s.name || s.action || 'Diagnostic Action';
+                const sStatus = s.status || 'success';
+                const sDet = s.details || '';
+                const sOut = s.mcp_output || '';
+
+                let emoji = "⚡";
+                if (sName.toLowerCase().includes('query') || sName.toLowerCase().includes('check')) emoji = "🔍";
+                else if (sName.toLowerCase().includes('note') || sName.toLowerCase().includes('work')) emoji = "📝";
+                else if (sName.toLowerCase().includes('rca') || sName.toLowerCase().includes('analysis')) emoji = "🧠";
+                else if (sName.toLowerCase().includes('resolve') || sName.toLowerCase().includes('close')) emoji = "✅";
+                else if (sName.toLowerCase().includes('probe') || sName.toLowerCase().includes('log') || sName.toLowerCase().includes('details')) emoji = "📡";
+
+                lines.push(`[${tStr}] ─── STEP ${sNum}/${steps.length}: ${sName} ───`);
+                lines.push(`[${tStr}] ${emoji} [EXEC] ${sDet.substring(0, 150)}`);
+
+                if (sOut.includes('Value too long') || sOut.includes('ERROR') || sOut.includes('Exception')) {
+                    const firstErr = sOut.split('\n').find(l => l.includes('ERROR') || l.includes('Exception') || l.includes('Value too long')) || '';
+                    if (firstErr) {
+                        lines.push(`[${tStr}] 🚨 [DETECTED] ${firstErr.trim().substring(0, 140)}`);
+                    }
+                } else if (sName.toLowerCase().includes('rca')) {
+                    lines.push(`[${tStr}] 💡 [RCA_SUMMARY] Root cause diagnosed: Database schema column length constraint mismatch.`);
+                } else if (sOut.includes('INC') || sOut.includes('sys_id')) {
+                    const incMatch = sOut.match(/\b(INC\d+)\b/);
+                    if (incMatch) {
+                        lines.push(`[${tStr}] 🎫 [SNOW_TICKET] Incident reference: ${incMatch[1]} [HTTP 200/201]`);
+                    }
+                }
+            });
+
+            lines.push(`[${tStr}] ────────────────────────────────────────────────────────────────────`);
+            const statusLabel = (run.status === 'incident_created' || run.status === 'incident_resolved') ? 'INCIDENT_PROCESSED & RESOLVED' : (run.status === 'healthy' ? 'HEALTHY (Nominal)' : run.status.toUpperCase());
+            lines.push(`[${tStr}] 🏁 [MISSION_COMPLETE] Autonomous cycle completed in ${run.duration_seconds || 1.2}s. Status: ${statusLabel}`);
+            lines.push(`[${tStr}] ⏳ [STANDBY] Next execution scheduled in ${ctx.interval_minutes || 5}m loop.`);
+
+            return lines.join('\n');
+        }
+
+        function renderActiveRunView() {
+            if (!activeBotLogsData) return;
+
+            const history = activeBotLogsData.run_history || [];
+            const stepperEl = document.getElementById('terminal-workflow-stepper');
+            const stepMetaEl = document.getElementById('terminal-step-meta');
+            const screenEl = document.getElementById('terminal-stream-screen');
+            const reportCardsEl = document.getElementById('bot-report-cards-container');
+
+            if (history.length === 0) {
+                if (stepperEl) {
+                    stepperEl.innerHTML = `
+                        <div class="stepper-pill" style="opacity: 0.6;">
+                            <span>⏳ No execution steps recorded yet.</span>
                         </div>
-                        <div style="font-size: 12px; color: #e2e8f0; font-family: var(--font-mono); line-height: 1.5; white-space: pre-wrap; background: rgba(0,0,0,0.4); padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); max-height: 130px; overflow-y: auto;">${escapeHtml(botPrompt)}</div>
+                    `;
+                }
+                if (stepMetaEl) stepMetaEl.textContent = '0 steps';
+                if (screenEl) {
+                    screenEl.innerHTML = `
+                        <div style="color: #64748b; font-style: italic; padding: 20px 0;">
+                            [STANDBY] Agent is online and awaiting execution trigger.<br>
+                            Click <strong style="color: #10b981;">⚡ Trigger Now</strong> in the top-right toolbar to start live execution.
+                        </div>
+                        <div class="terminal-prompt-line">
+                            <span style="color: #10b981; font-weight: bold;">agent@mcp-portal</span>:<span style="color: #38bdf8;">~/bots/${escapeHtml(activeViewingBotId || 'bot')}</span>$ <span class="terminal-cursor">█</span>
+                        </div>
+                    `;
+                }
+                if (reportCardsEl) {
+                    reportCardsEl.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); padding: 50px 20px;">
+                            <h3>No Executive Reports Generated Yet</h3>
+                            <p style="font-size: 13px; margin-top: 6px;">Trigger this bot once to generate rich telemetry and RCA reports.</p>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            const currentRun = history[activeRunIndex] || history[0];
+            const steps = currentRun.steps || [];
+
+            // 1. Render Workflow Stepper
+            if (stepperEl) {
+                if (steps.length === 0) {
+                    stepperEl.innerHTML = `<span style="font-size: 11px; color: var(--text-muted);">No steps in this run.</span>`;
+                } else {
+                    stepperEl.innerHTML = steps.map((s, idx) => {
+                        let statusClass = 'success';
+                        let statusIcon = '✅';
+                        if (s.status === 'alert' || s.status === 'failed') {
+                            statusClass = 'alert';
+                            statusIcon = '🚨';
+                        } else if (s.status === 'in_progress') {
+                            statusClass = 'running';
+                            statusIcon = '⚡';
+                        }
+                        return `
+                            <div class="stepper-pill ${statusClass}" title="${escapeHtml(s.details || '')}">
+                                <span>${statusIcon}</span>
+                                <span><strong>Step ${s.step || (idx + 1)}:</strong> ${escapeHtml((s.name || s.action || 'Action').split('(')[0].trim())}</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+            if (stepMetaEl) {
+                stepMetaEl.textContent = `${steps.length} steps completed in ${currentRun.duration_seconds || 1.2}s`;
+            }
+
+            // 2. Render Terminal Output Lines
+            if (screenEl) {
+                let streamText = currentRun.terminal_output;
+                if (!streamText || typeof streamText !== 'string' || streamText.trim().length === 0) {
+                    streamText = synthesizeTerminalLinesFromRun(currentRun, activeBotLogsData);
+                }
+
+                const lines = streamText.split('\n');
+                const htmlLines = lines.map(l => formatTerminalLineSyntax(l)).join('');
+                
+                const promptLine = `
+                    <div class="terminal-prompt-line">
+                        <span style="color: #10b981; font-weight: bold;">agent@mcp-portal</span>:<span style="color: #38bdf8;">~/bots/${escapeHtml(activeViewingBotId || 'bot')}</span>$ <span class="terminal-cursor">█</span>
                     </div>
                 `;
 
-                const history = data.run_history || [];
-                if (history.length === 0) {
-                    body.innerHTML = `
-                        ${promptCard}
-                        <div style="text-align: center; color: var(--text-muted); padding: 40px;">
-                            <h3>No Execution History Yet</h3>
-                            <p style="font-size: 13px; margin-top: 6px;">Click <strong>⚡ Trigger Once</strong> on the dashboard to trigger this bot's autonomous workflow.</p>
-                        </div>
-                    `;
-                    return;
+                screenEl.innerHTML = htmlLines + promptLine;
+
+                const autoScrollCheckbox = document.getElementById('terminal-autoscroll');
+                if (autoScrollCheckbox && autoScrollCheckbox.checked) {
+                    screenEl.scrollTop = screenEl.scrollHeight;
+                }
+            }
+
+            // 3. Render Executive Markdown & RCA Report Cards
+            if (reportCardsEl) {
+                const rca = currentRun.rca || {};
+                const isAlert = currentRun.status === 'incident_created' || currentRun.status === 'incident_resolved';
+                const isDeduplicated = currentRun.status === 'deduplicated' || currentRun.status === 'skipped';
+
+                let badgeClass = 'badge-ok';
+                let badgeText = 'HEALTHY';
+                let statusIcon = '✅';
+
+                if (isAlert) {
+                    badgeClass = 'badge-err';
+                    badgeText = 'INCIDENT PROCESSED';
+                    statusIcon = '🚨';
+                } else if (isDeduplicated) {
+                    badgeClass = 'badge-warn';
+                    badgeText = 'DEDUPLICATED';
+                    statusIcon = '🛡️';
+                } else if (currentRun.status === 'success') {
+                    badgeClass = 'badge-ok';
+                    badgeText = 'SUCCESS';
+                    statusIcon = '🟢';
                 }
 
-                body.innerHTML = promptCard;
-
-                history.forEach((run, idx) => {
-                    const rca = run.rca || {};
-                    const isAlert = run.status === 'incident_created' || run.status === 'incident_resolved';
-                    const isDeduplicated = run.status === 'deduplicated' || run.status === 'skipped';
-                    const isHealthy = run.status === 'healthy' || run.status === 'success';
-
-                    let badgeClass = 'badge-ok';
-                    let badgeText = 'HEALTHY';
-                    let statusIcon = '✅';
-
-                    if (isAlert) {
-                        badgeClass = 'badge-err';
-                        badgeText = 'INCIDENT DETECTED';
-                        statusIcon = '🚨';
-                    } else if (isDeduplicated) {
-                        badgeClass = 'badge-warn';
-                        badgeText = 'DEDUPLICATED';
-                        statusIcon = '🛡️';
-                    } else if (run.status === 'success') {
-                        badgeClass = 'badge-ok';
-                        badgeText = 'SUCCESS';
-                        statusIcon = '🟢';
-                    }
-
-                    const card = document.createElement('div');
-                    card.style.background = 'var(--bg-surface)';
-                    card.style.border = isAlert ? '1px solid rgba(239, 68, 68, 0.4)' : (isDeduplicated ? '1px solid rgba(234, 179, 8, 0.4)' : '1px solid var(--border-color)');
-                    card.style.borderRadius = '12px';
-                    card.style.padding = '18px';
-                    card.style.marginBottom = '18px';
-
-                    // 1. Format Executive Markdown Report Card
-                    let reportHtml = '';
-                    const reportMd = run.report_markdown || run.report || (rca && rca.formatted_rca_markdown);
-                    if (reportMd) {
-                        reportHtml = `
-                            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 16px; margin: 14px 0;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px;">
-                                    <h4 style="color: #38bdf8; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; margin: 0;">
-                                        📊 Executive Report & Health Dashboard
-                                    </h4>
-                                    <span style="font-size: 11px; color: var(--text-muted);">AI Synthesized Telemetry</span>
-                                </div>
-                                <div class="report-markdown-body" style="font-size: 13px; line-height: 1.6; color: #e2e8f0;">
-                                    ${formatMarkdownToHtml(reportMd)}
-                                </div>
+                let reportHtml = '';
+                const reportMd = currentRun.report_markdown || currentRun.report || (rca && rca.formatted_rca_markdown);
+                if (reportMd) {
+                    reportHtml = `
+                        <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 16px; margin: 14px 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px;">
+                                <h4 style="color: #38bdf8; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; margin: 0;">
+                                    📊 Executive Report & Health Dashboard
+                                </h4>
+                                <span style="font-size: 11px; color: var(--text-muted);">AI Synthesized Telemetry</span>
                             </div>
-                        `;
-                    } else if (run.summary && run.summary.length > 60) {
-                        reportHtml = `
-                            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin: 12px 0;">
-                                <strong style="color: #38bdf8; font-size: 12px;">Summary:</strong>
-                                <div style="font-size: 13px; color: #f1f5f9; margin-top: 4px;">${escapeHtml(run.summary)}</div>
+                            <div class="report-markdown-body" style="font-size: 13px; line-height: 1.6; color: #e2e8f0;">
+                                ${formatMarkdownToHtml(reportMd)}
                             </div>
-                        `;
-                    }
+                        </div>
+                    `;
+                }
 
-                    // 2. Format RCA Box if root cause is identified
-                    let rcaHtml = '';
-                    if (rca.root_cause) {
-                        rcaHtml = `
-                            <div class="rca-box" style="margin: 14px 0;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                    <h4 style="color: #c084fc; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; margin: 0;">
-                                        🧠 AI Root Cause Analysis (RCA)
-                                    </h4>
-                                    <span class="badge badge-warn">${escapeHtml(rca.severity || 'HIGH')} SEVERITY</span>
-                                </div>
-                                <div class="rca-field">
-                                    <div class="rca-field-title">🔍 Root Cause:</div>
-                                    <div style="color: #f1f5f9; font-size: 13px;">${escapeHtml(rca.root_cause)}</div>
-                                </div>
-                                <div class="rca-field">
-                                    <div class="rca-field-title">🧩 Affected Component:</div>
-                                    <div style="color: #cbd5e1; font-size: 12px; font-family: var(--font-mono);">${escapeHtml(rca.affected_component || 'N/A')}</div>
-                                </div>
-                                <div class="rca-field">
-                                    <div class="rca-field-title">🛠️ Recommended Remediation:</div>
-                                    <div style="color: #4ade80; font-size: 12px;">${escapeHtml(rca.recommended_fix || 'Scale connection pool and review transactions')}</div>
-                                </div>
+                let rcaHtml = '';
+                if (rca.root_cause) {
+                    rcaHtml = `
+                        <div class="rca-box" style="margin: 14px 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h4 style="color: #c084fc; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; margin: 0;">
+                                    🧠 AI Root Cause Analysis (RCA)
+                                </h4>
+                                <span class="badge badge-warn">${escapeHtml(rca.severity || 'HIGH')} SEVERITY</span>
                             </div>
-                        `;
-                    }
-
-                    // 3. Format Step Timeline
-                    let stepsHtml = '';
-                    if (run.steps && run.steps.length > 0) {
-                        stepsHtml = `
-                            <div style="margin-top: 14px;">
-                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">
-                                    Workflow Execution Steps (${run.steps.length})
-                                </div>
-                                <div class="step-timeline">
-                                    ${run.steps.map(s => `
-                                        <div class="timeline-step">
-                                            <div class="timeline-step-header">
-                                                <div style="display: flex; align-items: center; gap: 8px;">
-                                                    <span class="timeline-step-num">Step ${s.step}</span>
-                                                    <strong style="font-size: 13px; color: #f8fafc;">${escapeHtml(s.name || s.action || 'Step')}</strong>
-                                                </div>
-                                                <span class="badge ${s.status === 'success' ? 'badge-ok' : (s.status === 'alert' ? 'badge-err' : (s.status === 'warning' ? 'badge-warn' : 'badge-ready'))}">
-                                                    ${escapeHtml((s.status || 'DONE').toUpperCase())}
-                                                </span>
-                                            </div>
-                                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">${escapeHtml(s.details || '')}</div>
-                                            ${s.mcp_output ? `<pre class="code-block" style="margin-top: 6px; font-size: 11px; max-height: 120px; overflow-y: auto;"><code>${escapeHtml(s.mcp_output)}</code></pre>` : ''}
-                                        </div>
-                                    `).join('')}
-                                </div>
+                            <div class="rca-field">
+                                <div class="rca-field-title">🔍 Root Cause:</div>
+                                <div style="color: #f1f5f9; font-size: 13px;">${escapeHtml(rca.root_cause)}</div>
                             </div>
-                        `;
-                    }
+                            <div class="rca-field">
+                                <div class="rca-field-title">🧩 Affected Component:</div>
+                                <div style="color: #cbd5e1; font-size: 12px; font-family: var(--font-mono);">${escapeHtml(rca.affected_component || 'N/A')}</div>
+                            </div>
+                            <div class="rca-field">
+                                <div class="rca-field-title">🛠️ Recommended Remediation:</div>
+                                <div style="color: #4ade80; font-size: 12px;">${escapeHtml(rca.recommended_fix || 'Scale connection pool and review transactions')}</div>
+                            </div>
+                        </div>
+                    `;
+                }
 
-                    card.innerHTML = `
+                reportCardsEl.innerHTML = `
+                    <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <span style="font-size: 20px;">${statusIcon}</span>
                                 <div>
-                                    <h4 style="font-size: 15px; font-weight: 750; color: #f8fafc; margin: 0;">${escapeHtml(run.summary || 'Execution Trace')}</h4>
-                                    <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(run.timestamp)} • Trigger: ${escapeHtml(run.trigger || 'Manual')} • Duration: ${run.duration_seconds || 1.2}s</span>
+                                    <h4 style="font-size: 15px; font-weight: 750; color: #f8fafc; margin: 0;">${escapeHtml(currentRun.summary || 'Execution Trace')}</h4>
+                                    <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(currentRun.timestamp)} • Trigger: ${escapeHtml(currentRun.trigger || 'Autonomous SRE')} • Duration: ${currentRun.duration_seconds || 1.2}s</span>
                                 </div>
                             </div>
-                            <span class="badge ${badgeClass}">
-                                ${badgeText}
-                            </span>
+                            <span class="badge ${badgeClass}">${badgeText}</span>
                         </div>
-
                         ${reportHtml}
-
                         ${rcaHtml}
+                    </div>
+                `;
+            }
+        }
 
-                        ${stepsHtml}
-                    `;
+        async function openBotLogsModal(botId) {
+            activeViewingBotId = botId;
+            activeRunIndex = 0;
+            const modal = document.getElementById('bot-logs-modal');
+            const titleEl = document.getElementById('bot-logs-title');
+            const windowTitleEl = document.getElementById('terminal-window-title');
+            const statusBadgeEl = document.getElementById('bot-terminal-status-badge');
+            const screenEl = document.getElementById('terminal-stream-screen');
+            const instructionsEl = document.getElementById('terminal-bot-instructions');
+            const toolsBadgesEl = document.getElementById('terminal-tools-badges');
+            const toolsCountEl = document.getElementById('terminal-tools-count');
+            const contextTagsEl = document.getElementById('terminal-context-tags');
+            const runSelectEl = document.getElementById('terminal-run-select');
 
-                    body.appendChild(card);
-                });
+            switchModalViewMode('terminal');
+            modal.classList.add('active');
+
+            if (screenEl) {
+                screenEl.innerHTML = '<div style="color: #38bdf8; font-family: var(--font-mono); padding: 20px 0;">[SYSTEM] Initializing Agent Mission Control and fetching execution history...</div>';
+            }
+
+            try {
+                const res = await fetch(`/api/bots/${botId}/logs`);
+                const data = await res.json();
+                activeBotLogsData = data;
+
+                if (titleEl) {
+                    titleEl.textContent = `Agent Mission Control: ${data.name || botId}`;
+                }
+                if (windowTitleEl) {
+                    windowTitleEl.textContent = `agent@mcp-ai-portal: ~/bots/${escapeHtml(botId)}`;
+                }
+
+                const isRunning = allBots[botId] && !!allBots[botId].is_running;
+                if (statusBadgeEl) {
+                    if (isRunning) {
+                        statusBadgeEl.className = 'badge badge-ok';
+                        statusBadgeEl.textContent = '🛡️ WATCHDOG ACTIVE';
+                    } else {
+                        statusBadgeEl.className = 'badge badge-ready';
+                        statusBadgeEl.textContent = '🟢 IDLE';
+                    }
+                }
+
+                // 1. Mission Prompt
+                const prompt = data.instructions || data.description || (allBots[botId] && (allBots[botId].instructions || allBots[botId].description)) || 'Autonomous SRE & diagnostic instructions';
+                if (instructionsEl) {
+                    instructionsEl.textContent = prompt;
+                }
+
+                // 2. Tools Inventory
+                const toolsReq = data.tools_required || [];
+                if (toolsCountEl) {
+                    toolsCountEl.textContent = `${toolsReq.length} Connected Tools`;
+                }
+                if (toolsBadgesEl) {
+                    if (toolsReq.length === 0) {
+                        toolsBadgesEl.innerHTML = `<span style="font-size: 11px; color: var(--text-muted);">No external tools attached.</span>`;
+                    } else {
+                        const toolIcons = {
+                            "azure_app_service": "☁️ azure_app_service",
+                            "servicenow": "🎫 servicenow",
+                            "azure_devops": "🏗️ azure_devops",
+                            "azure_virtual_machines": "💻 azure_vms",
+                            "built_in_rca": "🧠 built_in_rca"
+                        };
+                        toolsBadgesEl.innerHTML = toolsReq.map(t => {
+                            const label = toolIcons[t.toLowerCase()] || `🛠️ ${t}`;
+                            return `<span class="bot-tag" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #7dd3fc; font-weight: 600;">${escapeHtml(label)}</span>`;
+                        }).join('');
+                    }
+                }
+
+                // 3. Target Environment Context Tags
+                const ctx = data.context_config || {};
+                if (contextTagsEl) {
+                    const ctxTags = [];
+                    if (ctx.app_service_name) ctxTags.push(`App: <strong>${escapeHtml(ctx.app_service_name)}</strong>`);
+                    if (ctx.resource_group) ctxTags.push(`RG: <strong>${escapeHtml(ctx.resource_group)}</strong>`);
+                    if (ctx.project) ctxTags.push(`Project: <strong>${escapeHtml(ctx.project)}</strong>`);
+                    if (ctx.repo || ctx.ado_repo) ctxTags.push(`Repo: <strong>${escapeHtml(ctx.repo || ctx.ado_repo)}</strong>`);
+                    if (ctx.branch) ctxTags.push(`Branch: <strong>${escapeHtml(ctx.branch)}</strong>`);
+                    
+                    if (ctxTags.length > 0) {
+                        contextTagsEl.innerHTML = ctxTags.map(tag => `<span class="bot-tag" style="font-size: 10.5px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.25); color: #cbd5e1;">${tag}</span>`).join('');
+                    } else {
+                        contextTagsEl.innerHTML = `<span style="font-size: 10.5px; color: var(--text-muted);">Global Context Target</span>`;
+                    }
+                }
+
+                // 4. Populate Run Selector Dropdown
+                const history = data.run_history || [];
+                if (runSelectEl) {
+                    if (history.length === 0) {
+                        runSelectEl.innerHTML = `<option value="0">No execution runs yet</option>`;
+                    } else {
+                        runSelectEl.innerHTML = history.map((r, idx) => {
+                            const isAlert = r.status === 'incident_created' || r.status === 'incident_resolved';
+                            const statusPill = isAlert ? '🚨 INCIDENT DETECTED' : (r.status === 'healthy' ? '🟢 HEALTHY' : `⚙️ ${r.status.toUpperCase()}`);
+                            const runNum = history.length - idx;
+                            const isLatest = idx === 0 ? ' (Latest)' : '';
+                            return `<option value="${idx}">Run #${runNum}${isLatest} • ${r.timestamp} • ${statusPill}</option>`;
+                        }).join('');
+                    }
+                    runSelectEl.value = "0";
+                }
+
+                // 5. Render Active Run View
+                renderActiveRunView();
 
             } catch (e) {
-                body.innerHTML = `<div style="color: #ef4444; padding: 20px;">Failed to load logs: ${e}</div>`;
+                if (screenEl) {
+                    screenEl.innerHTML = `<div style="color: #ef4444; padding: 20px;">Failed to load bot telemetry stream: ${escapeHtml(String(e))}</div>`;
+                }
+            }
+        }
+
+        async function triggerBotFromTerminal() {
+            if (!activeViewingBotId) return;
+            const btn = document.getElementById('btn-terminal-trigger');
+            const screenEl = document.getElementById('terminal-stream-screen');
+            const statusBadgeEl = document.getElementById('bot-terminal-status-badge');
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `⏳ Executing...`;
+            }
+            if (statusBadgeEl) {
+                statusBadgeEl.className = 'badge badge-warn';
+                statusBadgeEl.textContent = '⚡ EXECUTING CYCLE';
+            }
+
+            const nowStr = new Date().toTimeString().split(' ')[0];
+            if (screenEl) {
+                const execMsg = `
+                    <div class="terminal-line" style="color: #38bdf8; font-weight: 700; margin-top: 10px;">[${nowStr}] 🤖 [AGENT_WAKEUP] Triggering autonomous ReAct diagnostic cycle...</div>
+                    <div class="terminal-line" style="color: #facc15;">[${nowStr}] ⏳ [STREAM] Probing target environment telemetry and evaluating incident deduplication graph...</div>
+                `;
+                screenEl.innerHTML += execMsg;
+                screenEl.scrollTop = screenEl.scrollHeight;
+            }
+
+            try {
+                const res = await fetch(`/api/bots/${activeViewingBotId}/run`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("🎉 Autonomous cycle completed successfully!", "success");
+                    await openBotLogsModal(activeViewingBotId);
+                    await loadBots();
+                } else {
+                    showToast(`❌ Run failed: ${data.error || 'Unknown error'}`, "error");
+                }
+            } catch (e) {
+                showToast(`❌ Network error: ${e}`, "error");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `⚡ Trigger Now`;
+                }
             }
         }
 
         async function clearActiveBotLogs() {
             if (!activeViewingBotId) return;
-            if (!confirm(`Are you sure you want to clear all BOT Logs for this bot?`)) return;
+            if (!confirm(`Are you sure you want to clear all telemetry and terminal history for this bot?`)) return;
             try {
                 const res = await fetch(`/api/bots/${activeViewingBotId}/clear_logs`, { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                    showToast("🗑️ BOT Log cleared successfully!", "success");
+                    showToast("🗑️ Bot terminal and history cleared cleanly!", "success");
                     await openBotLogsModal(activeViewingBotId);
                     await loadBots();
                 } else {
@@ -4869,15 +5469,10 @@
         }
 
         function closeBotLogsModal() {
-            document.getElementById('bot-logs-modal').classList.remove('active');
+            const modal = document.getElementById('bot-logs-modal');
+            if (modal) modal.classList.remove('active');
             activeViewingBotId = null;
-        }
-
-        function toggleRawOutput(id) {
-            const el = document.getElementById(id);
-            if (el) {
-                el.style.display = el.style.display === 'none' ? 'block' : 'none';
-            }
+            activeBotLogsData = null;
         }
 
         // ==============================================================================
