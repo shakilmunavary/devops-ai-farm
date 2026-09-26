@@ -1,3 +1,3194 @@
 {
-  "servers": {}
+  "servers": {
+    "azure_devops": {
+      "id": "azure_devops",
+      "name": "Azure Devops",
+      "description": "Dynamically synthesized FastMCP Server for Azure Devops",
+      "category": "AI Synthesized Tool",
+      "transport": "stdio",
+      "created_at": "2026-09-20 05:45:42",
+      "all_tools": [
+        {
+          "category": "Query",
+          "description": "List all projects in the organization",
+          "endpoint": "/_apis/projects",
+          "example_call": "list_projects(stateFilter='wellFormed')",
+          "method": "GET",
+          "name": "list_projects",
+          "params": {
+            "stateFilter": "type (optional) - Filter projects by state (wellFormed, deleting, new, unchanged, all). Default is wellFormed."
+          },
+          "sample_args": {
+            "stateFilter": "wellFormed"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve project metadata and process template",
+          "endpoint": "/_apis/projects/{project}",
+          "example_call": "get_project_details(project='my-project')",
+          "method": "GET",
+          "name": "get_project_details",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all teams in a project",
+          "endpoint": "/_apis/projects/{project}/teams",
+          "example_call": "list_teams(project='my-project')",
+          "method": "GET",
+          "name": "list_teams",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all Git repositories",
+          "endpoint": "/_apis/git/repositories",
+          "example_call": "list_repositories(project='my-project')",
+          "method": "GET",
+          "name": "list_repositories",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get repository details and default branch",
+          "endpoint": "/_apis/git/repositories/{repositoryId}",
+          "example_call": "get_repository(repositoryId='12345')",
+          "method": "GET",
+          "name": "get_repository",
+          "params": {
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List active Git branches",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/refs",
+          "example_call": "list_branches(repositoryId='12345', filter='main')",
+          "method": "GET",
+          "name": "list_branches",
+          "params": {
+            "filter": "type (optional) - Filter branches by name",
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "filter": "main",
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Fetch source code file contents from a repository",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/items",
+          "example_call": "get_file_content(repositoryId='12345', path='src/main.py', versionDescriptor.version='main')",
+          "method": "GET",
+          "name": "get_file_content",
+          "params": {
+            "path": "type (required) - The path to the file",
+            "repositoryId": "type (required) - The ID of the repository",
+            "versionDescriptor.version": "type (optional) - The version of the file"
+          },
+          "sample_args": {
+            "path": "src/main.py",
+            "repositoryId": "12345",
+            "versionDescriptor.version": "main"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new Git repository",
+          "endpoint": "/_apis/git/repositories",
+          "example_call": "create_repository(name='new-repo', project.id='12345')",
+          "method": "POST",
+          "name": "create_repository",
+          "params": {
+            "name": "type (required) - The name of the repository",
+            "project.id": "type (required) - The ID of the project"
+          },
+          "sample_args": {
+            "name": "new-repo",
+            "project.id": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List pull requests with status filters",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests",
+          "example_call": "list_pull_requests(repositoryId='12345', status='active')",
+          "method": "GET",
+          "name": "list_pull_requests",
+          "params": {
+            "repositoryId": "type (required) - The ID of the repository",
+            "status": "type (optional) - Filter by status (active, completed, abandoned)"
+          },
+          "sample_args": {
+            "repositoryId": "12345",
+            "status": "active"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get pull request details, reviewers, and merge status",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}",
+          "example_call": "get_pull_request(repositoryId='12345', pullRequestId='1')",
+          "method": "GET",
+          "name": "get_pull_request",
+          "params": {
+            "pullRequestId": "type (required) - The ID of the pull request",
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "pullRequestId": "1",
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new pull request between branches",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests",
+          "example_call": "create_pull_request(repositoryId='12345', sourceRefName='refs/heads/feature-branch', targetRefName='refs/heads/main', title='New feature implementation')",
+          "method": "POST",
+          "name": "create_pull_request",
+          "params": {
+            "repositoryId": "type (required) - The ID of the repository",
+            "sourceRefName": "type (required) - The source branch",
+            "targetRefName": "type (required) - The target branch",
+            "title": "type (required) - The title of the pull request"
+          },
+          "sample_args": {
+            "repositoryId": "12345",
+            "sourceRefName": "refs/heads/feature-branch",
+            "targetRefName": "refs/heads/main",
+            "title": "New feature implementation"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update PR title, description, or merge status",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}",
+          "example_call": "update_pull_request(repositoryId='12345', pullRequestId='1', title='Updated feature implementation', description='Updated description', status='active')",
+          "method": "PATCH",
+          "name": "update_pull_request",
+          "params": {
+            "description": "type (optional) - The new description of the pull request",
+            "pullRequestId": "type (required) - The ID of the pull request",
+            "repositoryId": "type (required) - The ID of the repository",
+            "status": "type (optional) - The new status of the pull request",
+            "title": "type (optional) - The new title of the pull request"
+          },
+          "sample_args": {
+            "description": "Updated description",
+            "pullRequestId": "1",
+            "repositoryId": "12345",
+            "status": "active",
+            "title": "Updated feature implementation"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Read review comments and discussion threads",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}/threads",
+          "example_call": "list_pr_comments(repositoryId='12345', pullRequestId='1')",
+          "method": "GET",
+          "name": "list_pr_comments",
+          "params": {
+            "pullRequestId": "type (required) - The ID of the pull request",
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "pullRequestId": "1",
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all build and release pipelines",
+          "endpoint": "/_apis/pipelines",
+          "example_call": "list_pipelines(project='my-project')",
+          "method": "GET",
+          "name": "list_pipelines",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Trigger a pipeline run with branch and parameters",
+          "endpoint": "/_apis/pipelines/{pipelineId}/runs",
+          "example_call": "run_pipeline(pipelineId='1', project='my-project', branch='main', parameters='{\"key\":\"value\"}')",
+          "method": "POST",
+          "name": "run_pipeline",
+          "params": {
+            "branch": "type (optional) - The branch to run the pipeline on",
+            "parameters": "type (optional) - The parameters for the pipeline",
+            "pipelineId": "type (required) - The ID of the pipeline",
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "branch": "main",
+            "parameters": "{\"key\":\"value\"}",
+            "pipelineId": "1",
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List recent build executions with status and result",
+          "endpoint": "/_apis/build/builds",
+          "example_call": "list_builds(project='my-project', definitions='1', statusFilter='completed')",
+          "method": "GET",
+          "name": "list_builds",
+          "params": {
+            "definitions": "type (optional) - Filter by build definition IDs",
+            "project": "type (required) - The name or ID of the project",
+            "statusFilter": "type (optional) - Filter by status (all, completed, inProgress, cancelling, notStarted, postponed)"
+          },
+          "sample_args": {
+            "definitions": "1",
+            "project": "my-project",
+            "statusFilter": "completed"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get live build timeline and status",
+          "endpoint": "/_apis/build/builds/{buildId}/timeline",
+          "example_call": "get_build_status(buildId='1')",
+          "method": "GET",
+          "name": "get_build_status",
+          "params": {
+            "buildId": "type (required) - The ID of the build"
+          },
+          "sample_args": {
+            "buildId": "1"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Fetch build console logs",
+          "endpoint": "/_apis/build/builds/{buildId}/logs",
+          "example_call": "get_build_logs(buildId='1')",
+          "method": "GET",
+          "name": "get_build_logs",
+          "params": {
+            "buildId": "type (required) - The ID of the build"
+          },
+          "sample_args": {
+            "buildId": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Cancel an in-progress build",
+          "endpoint": "/_apis/build/builds/{buildId}",
+          "example_call": "cancel_build(buildId='1')",
+          "method": "POST",
+          "name": "cancel_build",
+          "params": {
+            "buildId": "type (required) - The ID of the build"
+          },
+          "sample_args": {
+            "buildId": "1"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Run WIQL query to search User Stories, Bugs, and Tasks",
+          "endpoint": "/_apis/wit/wiql",
+          "example_call": "query_work_items(query='SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.TeamProject] = \"my-project\"')",
+          "method": "POST",
+          "name": "query_work_items",
+          "params": {
+            "query": "type (required) - The WIQL query"
+          },
+          "sample_args": {
+            "query": "SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.TeamProject] = 'my-project'"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get full work item details and fields",
+          "endpoint": "/_apis/wit/workitems/{id}",
+          "example_call": "get_work_item(id='1')",
+          "method": "GET",
+          "name": "get_work_item",
+          "params": {
+            "id": "type (required) - The ID of the work item"
+          },
+          "sample_args": {
+            "id": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create Bug, Task, or User Story",
+          "endpoint": "/_apis/wit/workitems/${type}",
+          "example_call": "create_work_item(type='Bug', fields='{\"System.Title\":\"New Bug\",\"System.Description\":\"Bug description\"}')",
+          "method": "POST",
+          "name": "create_work_item",
+          "params": {
+            "fields": "type (required) - The fields of the work item",
+            "type": "type (required) - The type of the work item (Bug, Task, User Story)"
+          },
+          "sample_args": {
+            "fields": "{\"System.Title\":\"New Bug\",\"System.Description\":\"Bug description\"}",
+            "type": "Bug"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update state, priority, or assignees",
+          "endpoint": "/_apis/wit/workitems/{id}",
+          "example_call": "update_work_item(id='1', fields='{\"System.State\":\"In Progress\",\"System.AssignedTo\":\"user@domain.com\"}')",
+          "method": "PATCH",
+          "name": "update_work_item",
+          "params": {
+            "fields": "type (required) - The fields to update",
+            "id": "type (required) - The ID of the work item"
+          },
+          "sample_args": {
+            "fields": "{\"System.State\":\"In Progress\",\"System.AssignedTo\":\"user@domain.com\"}",
+            "id": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Post discussion comments or RCA notes",
+          "endpoint": "/_apis/wit/workitems/{id}/comments",
+          "example_call": "add_work_item_comment(id='1', text='This is a comment')",
+          "method": "POST",
+          "name": "add_work_item_comment",
+          "params": {
+            "id": "type (required) - The ID of the work item",
+            "text": "type (required) - The comment text"
+          },
+          "sample_args": {
+            "id": "1",
+            "text": "This is a comment"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List variable groups and environment settings",
+          "endpoint": "/_apis/distributedtask/variablegroups",
+          "example_call": "list_variable_groups(project='my-project')",
+          "method": "GET",
+          "name": "list_variable_groups",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get variable group key-value configurations",
+          "endpoint": "/_apis/distributedtask/variablegroups/{groupId}",
+          "example_call": "get_variable_group(groupId='1')",
+          "method": "GET",
+          "name": "get_variable_group",
+          "params": {
+            "groupId": "type (required) - The ID of the variable group"
+          },
+          "sample_args": {
+            "groupId": "1"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List service connections (Azure, Docker, GitHub, ServiceNow)",
+          "endpoint": "/_apis/serviceendpoint/endpoints",
+          "example_call": "list_service_endpoints(project='my-project')",
+          "method": "GET",
+          "name": "list_service_endpoints",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "name": "create_project",
+          "category": "Action",
+          "description": "Create a new Azure DevOps project in the organization with Git version control and process template",
+          "endpoint": "/_apis/projects",
+          "method": "POST",
+          "params": {
+            "name": "type (required) - Name of the new Azure DevOps project",
+            "description": "type (optional) - Description or purpose of the project",
+            "visibility": "type (optional) - Project visibility (private or public). Default is private.",
+            "process_template": "type (optional) - Process template name (Agile, Scrum, Basic, or CMMI). Default is Agile.",
+            "source_control_type": "type (optional) - Source control type (Git). Default is Git."
+          },
+          "sample_args": {
+            "name": "Sample-Project",
+            "description": "Sample microservice project",
+            "process_template": "Agile",
+            "visibility": "private"
+          },
+          "example_call": "create_project(name='Sample-Project', description='Project description', process_template='Agile', visibility='private')"
+        }
+      ],
+      "enabled_tools": [
+        "list_projects",
+        "get_project_details",
+        "list_teams",
+        "list_repositories",
+        "get_repository",
+        "list_branches",
+        "get_file_content",
+        "create_repository",
+        "list_pull_requests",
+        "get_pull_request",
+        "create_pull_request",
+        "update_pull_request",
+        "list_pr_comments",
+        "list_pipelines",
+        "run_pipeline",
+        "list_builds",
+        "get_build_status",
+        "get_build_logs",
+        "cancel_build",
+        "query_work_items",
+        "get_work_item",
+        "create_work_item",
+        "update_work_item",
+        "add_work_item_comment",
+        "list_variable_groups",
+        "get_variable_group",
+        "list_service_endpoints",
+        "create_project"
+      ],
+      "tools": [
+        {
+          "category": "Query",
+          "description": "List all projects in the organization",
+          "endpoint": "/_apis/projects",
+          "example_call": "list_projects(stateFilter='wellFormed')",
+          "method": "GET",
+          "name": "list_projects",
+          "params": {
+            "stateFilter": "type (optional) - Filter projects by state (wellFormed, deleting, new, unchanged, all). Default is wellFormed."
+          },
+          "sample_args": {
+            "stateFilter": "wellFormed"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve project metadata and process template",
+          "endpoint": "/_apis/projects/{project}",
+          "example_call": "get_project_details(project='my-project')",
+          "method": "GET",
+          "name": "get_project_details",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all teams in a project",
+          "endpoint": "/_apis/projects/{project}/teams",
+          "example_call": "list_teams(project='my-project')",
+          "method": "GET",
+          "name": "list_teams",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all Git repositories",
+          "endpoint": "/_apis/git/repositories",
+          "example_call": "list_repositories(project='my-project')",
+          "method": "GET",
+          "name": "list_repositories",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get repository details and default branch",
+          "endpoint": "/_apis/git/repositories/{repositoryId}",
+          "example_call": "get_repository(repositoryId='12345')",
+          "method": "GET",
+          "name": "get_repository",
+          "params": {
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List active Git branches",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/refs",
+          "example_call": "list_branches(repositoryId='12345', filter='main')",
+          "method": "GET",
+          "name": "list_branches",
+          "params": {
+            "filter": "type (optional) - Filter branches by name",
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "filter": "main",
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Fetch source code file contents from a repository",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/items",
+          "example_call": "get_file_content(repositoryId='12345', path='src/main.py', versionDescriptor.version='main')",
+          "method": "GET",
+          "name": "get_file_content",
+          "params": {
+            "path": "type (required) - The path to the file",
+            "repositoryId": "type (required) - The ID of the repository",
+            "versionDescriptor.version": "type (optional) - The version of the file"
+          },
+          "sample_args": {
+            "path": "src/main.py",
+            "repositoryId": "12345",
+            "versionDescriptor.version": "main"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new Git repository",
+          "endpoint": "/_apis/git/repositories",
+          "example_call": "create_repository(name='new-repo', project.id='12345')",
+          "method": "POST",
+          "name": "create_repository",
+          "params": {
+            "name": "type (required) - The name of the repository",
+            "project.id": "type (required) - The ID of the project"
+          },
+          "sample_args": {
+            "name": "new-repo",
+            "project.id": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List pull requests with status filters",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests",
+          "example_call": "list_pull_requests(repositoryId='12345', status='active')",
+          "method": "GET",
+          "name": "list_pull_requests",
+          "params": {
+            "repositoryId": "type (required) - The ID of the repository",
+            "status": "type (optional) - Filter by status (active, completed, abandoned)"
+          },
+          "sample_args": {
+            "repositoryId": "12345",
+            "status": "active"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get pull request details, reviewers, and merge status",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}",
+          "example_call": "get_pull_request(repositoryId='12345', pullRequestId='1')",
+          "method": "GET",
+          "name": "get_pull_request",
+          "params": {
+            "pullRequestId": "type (required) - The ID of the pull request",
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "pullRequestId": "1",
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new pull request between branches",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests",
+          "example_call": "create_pull_request(repositoryId='12345', sourceRefName='refs/heads/feature-branch', targetRefName='refs/heads/main', title='New feature implementation')",
+          "method": "POST",
+          "name": "create_pull_request",
+          "params": {
+            "repositoryId": "type (required) - The ID of the repository",
+            "sourceRefName": "type (required) - The source branch",
+            "targetRefName": "type (required) - The target branch",
+            "title": "type (required) - The title of the pull request"
+          },
+          "sample_args": {
+            "repositoryId": "12345",
+            "sourceRefName": "refs/heads/feature-branch",
+            "targetRefName": "refs/heads/main",
+            "title": "New feature implementation"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update PR title, description, or merge status",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}",
+          "example_call": "update_pull_request(repositoryId='12345', pullRequestId='1', title='Updated feature implementation', description='Updated description', status='active')",
+          "method": "PATCH",
+          "name": "update_pull_request",
+          "params": {
+            "description": "type (optional) - The new description of the pull request",
+            "pullRequestId": "type (required) - The ID of the pull request",
+            "repositoryId": "type (required) - The ID of the repository",
+            "status": "type (optional) - The new status of the pull request",
+            "title": "type (optional) - The new title of the pull request"
+          },
+          "sample_args": {
+            "description": "Updated description",
+            "pullRequestId": "1",
+            "repositoryId": "12345",
+            "status": "active",
+            "title": "Updated feature implementation"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Read review comments and discussion threads",
+          "endpoint": "/_apis/git/repositories/{repositoryId}/pullrequests/{pullRequestId}/threads",
+          "example_call": "list_pr_comments(repositoryId='12345', pullRequestId='1')",
+          "method": "GET",
+          "name": "list_pr_comments",
+          "params": {
+            "pullRequestId": "type (required) - The ID of the pull request",
+            "repositoryId": "type (required) - The ID of the repository"
+          },
+          "sample_args": {
+            "pullRequestId": "1",
+            "repositoryId": "12345"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all build and release pipelines",
+          "endpoint": "/_apis/pipelines",
+          "example_call": "list_pipelines(project='my-project')",
+          "method": "GET",
+          "name": "list_pipelines",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Trigger a pipeline run with branch and parameters",
+          "endpoint": "/_apis/pipelines/{pipelineId}/runs",
+          "example_call": "run_pipeline(pipelineId='1', project='my-project', branch='main', parameters='{\"key\":\"value\"}')",
+          "method": "POST",
+          "name": "run_pipeline",
+          "params": {
+            "branch": "type (optional) - The branch to run the pipeline on",
+            "parameters": "type (optional) - The parameters for the pipeline",
+            "pipelineId": "type (required) - The ID of the pipeline",
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "branch": "main",
+            "parameters": "{\"key\":\"value\"}",
+            "pipelineId": "1",
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List recent build executions with status and result",
+          "endpoint": "/_apis/build/builds",
+          "example_call": "list_builds(project='my-project', definitions='1', statusFilter='completed')",
+          "method": "GET",
+          "name": "list_builds",
+          "params": {
+            "definitions": "type (optional) - Filter by build definition IDs",
+            "project": "type (required) - The name or ID of the project",
+            "statusFilter": "type (optional) - Filter by status (all, completed, inProgress, cancelling, notStarted, postponed)"
+          },
+          "sample_args": {
+            "definitions": "1",
+            "project": "my-project",
+            "statusFilter": "completed"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get live build timeline and status",
+          "endpoint": "/_apis/build/builds/{buildId}/timeline",
+          "example_call": "get_build_status(buildId='1')",
+          "method": "GET",
+          "name": "get_build_status",
+          "params": {
+            "buildId": "type (required) - The ID of the build"
+          },
+          "sample_args": {
+            "buildId": "1"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Fetch build console logs",
+          "endpoint": "/_apis/build/builds/{buildId}/logs",
+          "example_call": "get_build_logs(buildId='1')",
+          "method": "GET",
+          "name": "get_build_logs",
+          "params": {
+            "buildId": "type (required) - The ID of the build"
+          },
+          "sample_args": {
+            "buildId": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Cancel an in-progress build",
+          "endpoint": "/_apis/build/builds/{buildId}",
+          "example_call": "cancel_build(buildId='1')",
+          "method": "POST",
+          "name": "cancel_build",
+          "params": {
+            "buildId": "type (required) - The ID of the build"
+          },
+          "sample_args": {
+            "buildId": "1"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Run WIQL query to search User Stories, Bugs, and Tasks",
+          "endpoint": "/_apis/wit/wiql",
+          "example_call": "query_work_items(query='SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.TeamProject] = \"my-project\"')",
+          "method": "POST",
+          "name": "query_work_items",
+          "params": {
+            "query": "type (required) - The WIQL query"
+          },
+          "sample_args": {
+            "query": "SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.TeamProject] = 'my-project'"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get full work item details and fields",
+          "endpoint": "/_apis/wit/workitems/{id}",
+          "example_call": "get_work_item(id='1')",
+          "method": "GET",
+          "name": "get_work_item",
+          "params": {
+            "id": "type (required) - The ID of the work item"
+          },
+          "sample_args": {
+            "id": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create Bug, Task, or User Story",
+          "endpoint": "/_apis/wit/workitems/${type}",
+          "example_call": "create_work_item(type='Bug', fields='{\"System.Title\":\"New Bug\",\"System.Description\":\"Bug description\"}')",
+          "method": "POST",
+          "name": "create_work_item",
+          "params": {
+            "fields": "type (required) - The fields of the work item",
+            "type": "type (required) - The type of the work item (Bug, Task, User Story)"
+          },
+          "sample_args": {
+            "fields": "{\"System.Title\":\"New Bug\",\"System.Description\":\"Bug description\"}",
+            "type": "Bug"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update state, priority, or assignees",
+          "endpoint": "/_apis/wit/workitems/{id}",
+          "example_call": "update_work_item(id='1', fields='{\"System.State\":\"In Progress\",\"System.AssignedTo\":\"user@domain.com\"}')",
+          "method": "PATCH",
+          "name": "update_work_item",
+          "params": {
+            "fields": "type (required) - The fields to update",
+            "id": "type (required) - The ID of the work item"
+          },
+          "sample_args": {
+            "fields": "{\"System.State\":\"In Progress\",\"System.AssignedTo\":\"user@domain.com\"}",
+            "id": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Post discussion comments or RCA notes",
+          "endpoint": "/_apis/wit/workitems/{id}/comments",
+          "example_call": "add_work_item_comment(id='1', text='This is a comment')",
+          "method": "POST",
+          "name": "add_work_item_comment",
+          "params": {
+            "id": "type (required) - The ID of the work item",
+            "text": "type (required) - The comment text"
+          },
+          "sample_args": {
+            "id": "1",
+            "text": "This is a comment"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List variable groups and environment settings",
+          "endpoint": "/_apis/distributedtask/variablegroups",
+          "example_call": "list_variable_groups(project='my-project')",
+          "method": "GET",
+          "name": "list_variable_groups",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Get variable group key-value configurations",
+          "endpoint": "/_apis/distributedtask/variablegroups/{groupId}",
+          "example_call": "get_variable_group(groupId='1')",
+          "method": "GET",
+          "name": "get_variable_group",
+          "params": {
+            "groupId": "type (required) - The ID of the variable group"
+          },
+          "sample_args": {
+            "groupId": "1"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List service connections (Azure, Docker, GitHub, ServiceNow)",
+          "endpoint": "/_apis/serviceendpoint/endpoints",
+          "example_call": "list_service_endpoints(project='my-project')",
+          "method": "GET",
+          "name": "list_service_endpoints",
+          "params": {
+            "project": "type (required) - The name or ID of the project"
+          },
+          "sample_args": {
+            "project": "my-project"
+          }
+        },
+        {
+          "name": "create_project",
+          "category": "Action",
+          "description": "Create a new Azure DevOps project in the organization with Git version control and process template",
+          "endpoint": "/_apis/projects",
+          "method": "POST",
+          "params": {
+            "name": "type (required) - Name of the new Azure DevOps project",
+            "description": "type (optional) - Description or purpose of the project",
+            "visibility": "type (optional) - Project visibility (private or public). Default is private.",
+            "process_template": "type (optional) - Process template name (Agile, Scrum, Basic, or CMMI). Default is Agile.",
+            "source_control_type": "type (optional) - Source control type (Git). Default is Git."
+          },
+          "sample_args": {
+            "name": "Sample-Project",
+            "description": "Sample microservice project",
+            "process_template": "Agile",
+            "visibility": "private"
+          },
+          "example_call": "create_project(name='Sample-Project', description='Project description', process_template='Agile', visibility='private')"
+        }
+      ],
+      "last_evaluation": {
+        "passed": true,
+        "probe": "list_projects",
+        "preview": "HTTP 200 OK: Found 1 project(s) ['AI-POC']"
+      },
+      "scope": {
+        "organization": "shakilaipoc",
+        "org": "shakilaipoc",
+        "owner": "shakilaipoc",
+        "project": "AI-POC"
+      }
+    },
+    "servicenow": {
+      "id": "servicenow",
+      "name": "Servicenow",
+      "description": "Dynamically synthesized FastMCP Server for Servicenow",
+      "category": "AI Synthesized Tool",
+      "transport": "stdio",
+      "created_at": "2026-09-20 05:46:59",
+      "all_tools": [
+        {
+          "category": "Query",
+          "description": "List incidents with filters for state, priority, assignment group, and active status",
+          "endpoint": "/api/now/table/incident",
+          "example_call": "list_incidents(state='in_progress', priority='1', assignment_group='abcd1234', active='true')",
+          "method": "GET",
+          "name": "list_incidents",
+          "params": {
+            "active": "optional - Filter by active status (true/false)",
+            "assignment_group": "optional - Filter by assignment group sys_id",
+            "priority": "optional - Filter by priority (1-5)",
+            "state": "optional - Filter by incident state (e.g., new, in_progress, resolved)"
+          },
+          "sample_args": {
+            "active": "true",
+            "assignment_group": "abcd1234",
+            "priority": "1",
+            "state": "in_progress"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve complete incident details and fields by incident number or sys_id",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "get_incident(sys_id='INC1234567')",
+          "method": "GET",
+          "name": "get_incident",
+          "params": {
+            "sys_id": "required - Incident sys_id or number"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new incident with caller, short description, description, category, urgency, and impact",
+          "endpoint": "/api/now/table/incident",
+          "example_call": "create_incident(caller_id='abcd1234', short_description='Server down', description='Production server is down and inaccessible', category='hardware', urgency='1', impact='3')",
+          "method": "POST",
+          "name": "create_incident",
+          "params": {
+            "caller_id": "required - Caller sys_id",
+            "category": "required - Incident category",
+            "description": "required - Detailed description of the incident",
+            "impact": "required - Impact level (1-3)",
+            "short_description": "required - Short description of the incident",
+            "urgency": "required - Urgency level (1-3)"
+          },
+          "sample_args": {
+            "caller_id": "abcd1234",
+            "category": "hardware",
+            "description": "Production server is down and inaccessible",
+            "impact": "3",
+            "short_description": "Server down",
+            "urgency": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update existing incident fields (state, urgency, impact, priority, category)",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "update_incident(sys_id='INC1234567', state='in_progress', urgency='2', impact='2', priority='2', category='software')",
+          "method": "PUT",
+          "name": "update_incident",
+          "params": {
+            "category": "optional - New category",
+            "impact": "optional - New impact level",
+            "priority": "optional - New priority level",
+            "state": "optional - New state of the incident",
+            "sys_id": "required - Incident sys_id",
+            "urgency": "optional - New urgency level"
+          },
+          "sample_args": {
+            "category": "software",
+            "impact": "2",
+            "priority": "2",
+            "state": "in_progress",
+            "sys_id": "INC1234567",
+            "urgency": "2"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Resolve an incident with resolution code and resolution notes",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "resolve_incident(sys_id='INC1234567', resolution_code='successful', resolution_notes='Server was rebooted and is now operational')",
+          "method": "PUT",
+          "name": "resolve_incident",
+          "params": {
+            "resolution_code": "required - Resolution code",
+            "resolution_notes": "required - Resolution notes",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "resolution_code": "successful",
+            "resolution_notes": "Server was rebooted and is now operational",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Permanently close an incident with closing notes",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "close_incident(sys_id='INC1234567', close_notes='Incident resolved and closed')",
+          "method": "PUT",
+          "name": "close_incident",
+          "params": {
+            "close_notes": "required - Closing notes",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "close_notes": "Incident resolved and closed",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Delete or archive an incident record by sys_id",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "delete_incident(sys_id='INC1234567')",
+          "method": "DELETE",
+          "name": "delete_incident",
+          "params": {
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Assign an incident to a specific user and assignment group",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "assign_incident(sys_id='INC1234567', assigned_to='abcd1234', assignment_group='efgh5678')",
+          "method": "PUT",
+          "name": "assign_incident",
+          "params": {
+            "assigned_to": "required - User sys_id to assign the incident to",
+            "assignment_group": "required - Assignment group sys_id",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "assigned_to": "abcd1234",
+            "assignment_group": "efgh5678",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Append internal technical work notes (e.g. diagnostics, AI RCA root cause analysis)",
+          "endpoint": "/api/now/table/incident/{sys_id}/work_notes",
+          "example_call": "add_work_note(sys_id='INC1234567', work_notes='Server rebooted and is now operational')",
+          "method": "POST",
+          "name": "add_work_note",
+          "params": {
+            "sys_id": "required - Incident sys_id",
+            "work_notes": "required - Work notes content"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567",
+            "work_notes": "Server rebooted and is now operational"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Add customer-visible communication updates to an incident",
+          "endpoint": "/api/now/table/incident/{sys_id}/comments",
+          "example_call": "add_customer_comment(sys_id='INC1234567', comment='We are working on resolving the issue')",
+          "method": "POST",
+          "name": "add_customer_comment",
+          "params": {
+            "comment": "required - Customer comment",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "comment": "We are working on resolving the issue",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve full activity stream, work notes history, and audit log for an incident",
+          "endpoint": "/api/now/table/sys_journal_field?element_id={sys_id}",
+          "example_call": "get_incident_journal_entries(sys_id='INC1234567')",
+          "method": "GET",
+          "name": "get_incident_journal_entries",
+          "params": {
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Execute custom encoded query string (e.g. active=true^priority=1^ORDERBYDESCsys_created_on)",
+          "endpoint": "/api/now/table/incident",
+          "example_call": "query_incidents(query='active=true^priority=1^ORDERBYDESCsys_created_on')",
+          "method": "GET",
+          "name": "query_incidents",
+          "params": {
+            "query": "required - Encoded query string"
+          },
+          "sample_args": {
+            "query": "active=true^priority=1^ORDERBYDESCsys_created_on"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Search ServiceNow Knowledge Base (KB) articles for incident troubleshooting and workarounds",
+          "endpoint": "/api/now/table/kb_knowledge",
+          "example_call": "search_knowledge_base(query='server down')",
+          "method": "GET",
+          "name": "search_knowledge_base",
+          "params": {
+            "query": "required - Search query"
+          },
+          "sample_args": {
+            "query": "server down"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List active problem records",
+          "endpoint": "/api/now/table/problem",
+          "example_call": "list_problems(active='true')",
+          "method": "GET",
+          "name": "list_problems",
+          "params": {
+            "active": "optional - Filter by active status (true/false)"
+          },
+          "sample_args": {
+            "active": "true"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new problem record from recurring incidents",
+          "endpoint": "/api/now/table/problem",
+          "example_call": "create_problem(short_description='Server downtime', description='Recurring server downtime issues', category='hardware', impact='3')",
+          "method": "POST",
+          "name": "create_problem",
+          "params": {
+            "category": "required - Problem category",
+            "description": "required - Detailed description of the problem",
+            "impact": "required - Impact level (1-3)",
+            "short_description": "required - Short description of the problem"
+          },
+          "sample_args": {
+            "category": "hardware",
+            "description": "Recurring server downtime issues",
+            "impact": "3",
+            "short_description": "Server downtime"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Associate an incident to a root-cause problem record",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "link_incident_to_problem(sys_id='INC1234567', problem_id='PRB1234567')",
+          "method": "PUT",
+          "name": "link_incident_to_problem",
+          "params": {
+            "problem_id": "required - Problem sys_id",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "problem_id": "PRB1234567",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List recent change requests (RFCs)",
+          "endpoint": "/api/now/table/change_request",
+          "example_call": "list_change_requests(state='approved')",
+          "method": "GET",
+          "name": "list_change_requests",
+          "params": {
+            "state": "optional - Filter by change request state (e.g., new, approved, implemented)"
+          },
+          "sample_args": {
+            "state": "approved"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve details of a specific change request",
+          "endpoint": "/api/now/table/change_request/{sys_id}",
+          "example_call": "get_change_request(sys_id='CHG1234567')",
+          "method": "GET",
+          "name": "get_change_request",
+          "params": {
+            "sys_id": "required - Change request sys_id"
+          },
+          "sample_args": {
+            "sys_id": "CHG1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve CMDB configuration item (server, database, container, or service) details",
+          "endpoint": "/api/now/table/cmdb_ci/{sys_id}",
+          "example_call": "get_ci_details(sys_id='CI1234567')",
+          "method": "GET",
+          "name": "get_ci_details",
+          "params": {
+            "sys_id": "required - Configuration item sys_id"
+          },
+          "sample_args": {
+            "sys_id": "CI1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Search CMDB for affected business services, applications, or infrastructure assets",
+          "endpoint": "/api/now/table/cmdb_ci",
+          "example_call": "search_cmdb(query='server')",
+          "method": "GET",
+          "name": "search_cmdb",
+          "params": {
+            "query": "required - Search query"
+          },
+          "sample_args": {
+            "query": "server"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Link an affected configuration item to an incident",
+          "endpoint": "/api/now/table/task_ci",
+          "example_call": "link_ci_to_incident(task='INC1234567', ci='CI1234567')",
+          "method": "POST",
+          "name": "link_ci_to_incident",
+          "params": {
+            "ci": "required - Configuration item sys_id",
+            "task": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "ci": "CI1234567",
+            "task": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Lookup user sys_id, department, and contact info by email or username",
+          "endpoint": "/api/now/table/sys_user",
+          "example_call": "get_user_details(query='user@example.com')",
+          "method": "GET",
+          "name": "get_user_details",
+          "params": {
+            "query": "required - Search query (email or username)"
+          },
+          "sample_args": {
+            "query": "user@example.com"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List assignment groups with member counts",
+          "endpoint": "/api/now/table/sys_user_group",
+          "example_call": "list_assignment_groups(query='DevOps')",
+          "method": "GET",
+          "name": "list_assignment_groups",
+          "params": {
+            "query": "optional - Search query"
+          },
+          "sample_args": {
+            "query": "DevOps"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all engineers and support staff in an assignment group",
+          "endpoint": "/api/now/table/sys_user_grmember",
+          "example_call": "get_group_members(group='abcd1234')",
+          "method": "GET",
+          "name": "get_group_members",
+          "params": {
+            "group": "required - Assignment group sys_id"
+          },
+          "sample_args": {
+            "group": "abcd1234"
+          }
+        }
+      ],
+      "enabled_tools": [
+        "list_incidents",
+        "get_incident",
+        "create_incident",
+        "update_incident",
+        "resolve_incident",
+        "close_incident",
+        "delete_incident",
+        "assign_incident",
+        "add_work_note",
+        "add_customer_comment",
+        "get_incident_journal_entries",
+        "query_incidents",
+        "search_knowledge_base",
+        "list_problems",
+        "create_problem",
+        "link_incident_to_problem",
+        "list_change_requests",
+        "get_change_request",
+        "get_ci_details",
+        "search_cmdb",
+        "link_ci_to_incident",
+        "get_user_details",
+        "list_assignment_groups",
+        "get_group_members"
+      ],
+      "tools": [
+        {
+          "category": "Query",
+          "description": "List incidents with filters for state, priority, assignment group, and active status",
+          "endpoint": "/api/now/table/incident",
+          "example_call": "list_incidents(state='in_progress', priority='1', assignment_group='abcd1234', active='true')",
+          "method": "GET",
+          "name": "list_incidents",
+          "params": {
+            "active": "optional - Filter by active status (true/false)",
+            "assignment_group": "optional - Filter by assignment group sys_id",
+            "priority": "optional - Filter by priority (1-5)",
+            "state": "optional - Filter by incident state (e.g., new, in_progress, resolved)"
+          },
+          "sample_args": {
+            "active": "true",
+            "assignment_group": "abcd1234",
+            "priority": "1",
+            "state": "in_progress"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve complete incident details and fields by incident number or sys_id",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "get_incident(sys_id='INC1234567')",
+          "method": "GET",
+          "name": "get_incident",
+          "params": {
+            "sys_id": "required - Incident sys_id or number"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new incident with caller, short description, description, category, urgency, and impact",
+          "endpoint": "/api/now/table/incident",
+          "example_call": "create_incident(caller_id='abcd1234', short_description='Server down', description='Production server is down and inaccessible', category='hardware', urgency='1', impact='3')",
+          "method": "POST",
+          "name": "create_incident",
+          "params": {
+            "caller_id": "required - Caller sys_id",
+            "category": "required - Incident category",
+            "description": "required - Detailed description of the incident",
+            "impact": "required - Impact level (1-3)",
+            "short_description": "required - Short description of the incident",
+            "urgency": "required - Urgency level (1-3)"
+          },
+          "sample_args": {
+            "caller_id": "abcd1234",
+            "category": "hardware",
+            "description": "Production server is down and inaccessible",
+            "impact": "3",
+            "short_description": "Server down",
+            "urgency": "1"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update existing incident fields (state, urgency, impact, priority, category)",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "update_incident(sys_id='INC1234567', state='in_progress', urgency='2', impact='2', priority='2', category='software')",
+          "method": "PUT",
+          "name": "update_incident",
+          "params": {
+            "category": "optional - New category",
+            "impact": "optional - New impact level",
+            "priority": "optional - New priority level",
+            "state": "optional - New state of the incident",
+            "sys_id": "required - Incident sys_id",
+            "urgency": "optional - New urgency level"
+          },
+          "sample_args": {
+            "category": "software",
+            "impact": "2",
+            "priority": "2",
+            "state": "in_progress",
+            "sys_id": "INC1234567",
+            "urgency": "2"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Resolve an incident with resolution code and resolution notes",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "resolve_incident(sys_id='INC1234567', resolution_code='successful', resolution_notes='Server was rebooted and is now operational')",
+          "method": "PUT",
+          "name": "resolve_incident",
+          "params": {
+            "resolution_code": "required - Resolution code",
+            "resolution_notes": "required - Resolution notes",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "resolution_code": "successful",
+            "resolution_notes": "Server was rebooted and is now operational",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Permanently close an incident with closing notes",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "close_incident(sys_id='INC1234567', close_notes='Incident resolved and closed')",
+          "method": "PUT",
+          "name": "close_incident",
+          "params": {
+            "close_notes": "required - Closing notes",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "close_notes": "Incident resolved and closed",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Delete or archive an incident record by sys_id",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "delete_incident(sys_id='INC1234567')",
+          "method": "DELETE",
+          "name": "delete_incident",
+          "params": {
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Assign an incident to a specific user and assignment group",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "assign_incident(sys_id='INC1234567', assigned_to='abcd1234', assignment_group='efgh5678')",
+          "method": "PUT",
+          "name": "assign_incident",
+          "params": {
+            "assigned_to": "required - User sys_id to assign the incident to",
+            "assignment_group": "required - Assignment group sys_id",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "assigned_to": "abcd1234",
+            "assignment_group": "efgh5678",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Append internal technical work notes (e.g. diagnostics, AI RCA root cause analysis)",
+          "endpoint": "/api/now/table/incident/{sys_id}/work_notes",
+          "example_call": "add_work_note(sys_id='INC1234567', work_notes='Server rebooted and is now operational')",
+          "method": "POST",
+          "name": "add_work_note",
+          "params": {
+            "sys_id": "required - Incident sys_id",
+            "work_notes": "required - Work notes content"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567",
+            "work_notes": "Server rebooted and is now operational"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Add customer-visible communication updates to an incident",
+          "endpoint": "/api/now/table/incident/{sys_id}/comments",
+          "example_call": "add_customer_comment(sys_id='INC1234567', comment='We are working on resolving the issue')",
+          "method": "POST",
+          "name": "add_customer_comment",
+          "params": {
+            "comment": "required - Customer comment",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "comment": "We are working on resolving the issue",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve full activity stream, work notes history, and audit log for an incident",
+          "endpoint": "/api/now/table/sys_journal_field?element_id={sys_id}",
+          "example_call": "get_incident_journal_entries(sys_id='INC1234567')",
+          "method": "GET",
+          "name": "get_incident_journal_entries",
+          "params": {
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Execute custom encoded query string (e.g. active=true^priority=1^ORDERBYDESCsys_created_on)",
+          "endpoint": "/api/now/table/incident",
+          "example_call": "query_incidents(query='active=true^priority=1^ORDERBYDESCsys_created_on')",
+          "method": "GET",
+          "name": "query_incidents",
+          "params": {
+            "query": "required - Encoded query string"
+          },
+          "sample_args": {
+            "query": "active=true^priority=1^ORDERBYDESCsys_created_on"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Search ServiceNow Knowledge Base (KB) articles for incident troubleshooting and workarounds",
+          "endpoint": "/api/now/table/kb_knowledge",
+          "example_call": "search_knowledge_base(query='server down')",
+          "method": "GET",
+          "name": "search_knowledge_base",
+          "params": {
+            "query": "required - Search query"
+          },
+          "sample_args": {
+            "query": "server down"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List active problem records",
+          "endpoint": "/api/now/table/problem",
+          "example_call": "list_problems(active='true')",
+          "method": "GET",
+          "name": "list_problems",
+          "params": {
+            "active": "optional - Filter by active status (true/false)"
+          },
+          "sample_args": {
+            "active": "true"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Create a new problem record from recurring incidents",
+          "endpoint": "/api/now/table/problem",
+          "example_call": "create_problem(short_description='Server downtime', description='Recurring server downtime issues', category='hardware', impact='3')",
+          "method": "POST",
+          "name": "create_problem",
+          "params": {
+            "category": "required - Problem category",
+            "description": "required - Detailed description of the problem",
+            "impact": "required - Impact level (1-3)",
+            "short_description": "required - Short description of the problem"
+          },
+          "sample_args": {
+            "category": "hardware",
+            "description": "Recurring server downtime issues",
+            "impact": "3",
+            "short_description": "Server downtime"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Associate an incident to a root-cause problem record",
+          "endpoint": "/api/now/table/incident/{sys_id}",
+          "example_call": "link_incident_to_problem(sys_id='INC1234567', problem_id='PRB1234567')",
+          "method": "PUT",
+          "name": "link_incident_to_problem",
+          "params": {
+            "problem_id": "required - Problem sys_id",
+            "sys_id": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "problem_id": "PRB1234567",
+            "sys_id": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List recent change requests (RFCs)",
+          "endpoint": "/api/now/table/change_request",
+          "example_call": "list_change_requests(state='approved')",
+          "method": "GET",
+          "name": "list_change_requests",
+          "params": {
+            "state": "optional - Filter by change request state (e.g., new, approved, implemented)"
+          },
+          "sample_args": {
+            "state": "approved"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve details of a specific change request",
+          "endpoint": "/api/now/table/change_request/{sys_id}",
+          "example_call": "get_change_request(sys_id='CHG1234567')",
+          "method": "GET",
+          "name": "get_change_request",
+          "params": {
+            "sys_id": "required - Change request sys_id"
+          },
+          "sample_args": {
+            "sys_id": "CHG1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve CMDB configuration item (server, database, container, or service) details",
+          "endpoint": "/api/now/table/cmdb_ci/{sys_id}",
+          "example_call": "get_ci_details(sys_id='CI1234567')",
+          "method": "GET",
+          "name": "get_ci_details",
+          "params": {
+            "sys_id": "required - Configuration item sys_id"
+          },
+          "sample_args": {
+            "sys_id": "CI1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Search CMDB for affected business services, applications, or infrastructure assets",
+          "endpoint": "/api/now/table/cmdb_ci",
+          "example_call": "search_cmdb(query='server')",
+          "method": "GET",
+          "name": "search_cmdb",
+          "params": {
+            "query": "required - Search query"
+          },
+          "sample_args": {
+            "query": "server"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Link an affected configuration item to an incident",
+          "endpoint": "/api/now/table/task_ci",
+          "example_call": "link_ci_to_incident(task='INC1234567', ci='CI1234567')",
+          "method": "POST",
+          "name": "link_ci_to_incident",
+          "params": {
+            "ci": "required - Configuration item sys_id",
+            "task": "required - Incident sys_id"
+          },
+          "sample_args": {
+            "ci": "CI1234567",
+            "task": "INC1234567"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Lookup user sys_id, department, and contact info by email or username",
+          "endpoint": "/api/now/table/sys_user",
+          "example_call": "get_user_details(query='user@example.com')",
+          "method": "GET",
+          "name": "get_user_details",
+          "params": {
+            "query": "required - Search query (email or username)"
+          },
+          "sample_args": {
+            "query": "user@example.com"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List assignment groups with member counts",
+          "endpoint": "/api/now/table/sys_user_group",
+          "example_call": "list_assignment_groups(query='DevOps')",
+          "method": "GET",
+          "name": "list_assignment_groups",
+          "params": {
+            "query": "optional - Search query"
+          },
+          "sample_args": {
+            "query": "DevOps"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List all engineers and support staff in an assignment group",
+          "endpoint": "/api/now/table/sys_user_grmember",
+          "example_call": "get_group_members(group='abcd1234')",
+          "method": "GET",
+          "name": "get_group_members",
+          "params": {
+            "group": "required - Assignment group sys_id"
+          },
+          "sample_args": {
+            "group": "abcd1234"
+          }
+        }
+      ],
+      "last_evaluation": {
+        "passed": true,
+        "probe": "list_incidents",
+        "preview": "HTTP 200 OK: {\"result\":[{\"parent\":\"\",\"made_sla\":\"true\",\"watch_list\":\"\",\"upon_reject\":\"cancel\",\"sys_updated_on\":\"2026-09-16 13:08:54\",\"child_incidents\":\"0\",\"hold_reason\":\"\",\"origin_table\":\"\",\"task_effective_number\":\"INC0010090\",\"approval_history\":\"\",\"number\":\"INC0010090\",\"resolved_by\":\"\",\"sys_updated_by\":\"mcp_admin\",\"opened_by\":{\"link\":\"https://dev392242.service-now.com/api/now/table/sys_user/a6d036ea9793cf106b"
+      },
+      "scope": {
+        "username": "mcp_admin"
+      }
+    },
+    "azure_app_service": {
+      "id": "azure_app_service",
+      "name": "Azure App Service",
+      "description": "Dynamically synthesized FastMCP Server for Azure App Service",
+      "category": "AI Synthesized Tool",
+      "transport": "stdio",
+      "created_at": "2026-09-20 05:52:14",
+      "all_tools": [
+        {
+          "category": "Query",
+          "description": "List all Web Apps and Function Apps in a resource group or subscription",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites",
+          "example_call": "list_app_services(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group')",
+          "method": "GET",
+          "name": "list_app_services",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve app state, runtime stack, default hostname, and outbound IP addresses",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}",
+          "example_call": "get_app_service_details(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_service_details",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Start a stopped Web App",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/start",
+          "example_call": "start_app_service(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "start_app_service",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Stop a running Web App",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/stop",
+          "example_call": "stop_app_service(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "stop_app_service",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Restart a Web App to apply new configurations or clear memory leaks",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restart",
+          "example_call": "restart_app_service(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "restart_app_service",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve active environment variables and connection strings",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings/list",
+          "example_call": "get_app_settings(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "get_app_settings",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Add or update key-value environment variables",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings",
+          "example_call": "update_app_settings(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', settings={'PORT': '8080', 'SPRING_PROFILES_ACTIVE': 'production', 'DB_URL': 'jdbc:mysql://your-db-server:3306/your-db'})",
+          "method": "PUT",
+          "name": "update_app_settings",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "settings": "object (required) - Key-value pairs of environment variables",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "settings": {
+              "DB_URL": "jdbc:mysql://your-db-server:3306/your-db",
+              "PORT": "8080",
+              "SPRING_PROFILES_ACTIVE": "production"
+            },
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve runtime configuration, linuxFxVersion, alwaysOn, and startup command",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web",
+          "example_call": "get_site_config(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "get_site_config",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update startup command, HTTP/2, AlwaysOn, or container settings",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web",
+          "example_call": "update_site_config(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', config={'linuxFxVersion': 'DOCKER|your-docker-image:latest', 'alwaysOn': True, 'http20Enabled': True, 'startupCommand': 'npm start'})",
+          "method": "PUT",
+          "name": "update_site_config",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "config": "object (required) - Configuration settings to update",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "config": {
+              "alwaysOn": true,
+              "http20Enabled": true,
+              "linuxFxVersion": "DOCKER|your-docker-image:latest",
+              "startupCommand": "npm start"
+            },
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Fetch recent container logs, docker logs, and HTTP stdout/stderr stream",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/logs",
+          "example_call": "get_app_service_logs(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_service_logs",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Pull real-time performance telemetry (CPU percentage, Memory working set, HTTP 5xx errors, Response Time)",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/metrics",
+          "example_call": "get_app_metrics(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_metrics",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Check health probe status and deployment readiness",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/health",
+          "example_call": "get_app_health_status(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_health_status",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List recent deployment history, commit IDs, and authors",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments",
+          "example_call": "list_deployments(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "list_deployments",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List active staging and production slots",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots",
+          "example_call": "list_deployment_slots(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "list_deployment_slots",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Perform zero-downtime slot swap between staging and production",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slotName}/swap",
+          "example_call": "swap_deployment_slots(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', slot_name='staging')",
+          "method": "POST",
+          "name": "swap_deployment_slots",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "slot_name": "string (required) - Name of the deployment slot",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "slot_name": "staging",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Scale App Service Plan tier or adjust instance count",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}",
+          "example_call": "scale_app_service_plan(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_plan_name='your-app-service-plan', sku={'name': 'P1v3', 'tier': 'PremiumV3', 'size': 'P1v3', 'family': 'Pv3', 'capacity': 2}, capacity=2)",
+          "method": "PUT",
+          "name": "scale_app_service_plan",
+          "params": {
+            "app_service_plan_name": "string (required) - Name of the App Service Plan",
+            "capacity": "integer (required) - Number of instances",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "sku": "object (required) - SKU details for scaling",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_plan_name": "your-app-service-plan",
+            "capacity": 2,
+            "resource_group": "your-resource-group",
+            "sku": {
+              "capacity": 2,
+              "family": "Pv3",
+              "name": "P1v3",
+              "size": "P1v3",
+              "tier": "PremiumV3"
+            },
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Admin",
+          "description": "Run diagnostic shell commands in the Kudu container environment",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/kudu/command",
+          "example_call": "execute_kudu_command(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', command='ls -la /home/site/wwwroot')",
+          "method": "POST",
+          "name": "execute_kudu_command",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "command": "string (required) - Shell command to execute",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "command": "ls -la /home/site/wwwroot",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Admin",
+          "description": "Read configuration or log files from the /home/site/wwwroot filesystem",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/vfs/{path}",
+          "example_call": "get_vfs_file_content(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', path='LogFiles/Application/Logs')",
+          "method": "GET",
+          "name": "get_vfs_file_content",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "path": "string (required) - Path to the file in the VFS",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "path": "LogFiles/Application/Logs",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      ],
+      "enabled_tools": [
+        "list_app_services",
+        "get_app_service_details",
+        "start_app_service",
+        "stop_app_service",
+        "restart_app_service",
+        "get_app_settings",
+        "update_app_settings",
+        "get_site_config",
+        "update_site_config",
+        "get_app_service_logs",
+        "get_app_metrics",
+        "get_app_health_status",
+        "list_deployments",
+        "list_deployment_slots",
+        "swap_deployment_slots",
+        "scale_app_service_plan",
+        "execute_kudu_command",
+        "get_vfs_file_content"
+      ],
+      "tools": [
+        {
+          "category": "Query",
+          "description": "List all Web Apps and Function Apps in a resource group or subscription",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites",
+          "example_call": "list_app_services(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group')",
+          "method": "GET",
+          "name": "list_app_services",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve app state, runtime stack, default hostname, and outbound IP addresses",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}",
+          "example_call": "get_app_service_details(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_service_details",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Start a stopped Web App",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/start",
+          "example_call": "start_app_service(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "start_app_service",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Stop a running Web App",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/stop",
+          "example_call": "stop_app_service(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "stop_app_service",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Restart a Web App to apply new configurations or clear memory leaks",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restart",
+          "example_call": "restart_app_service(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "restart_app_service",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve active environment variables and connection strings",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings/list",
+          "example_call": "get_app_settings(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "get_app_settings",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Add or update key-value environment variables",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings",
+          "example_call": "update_app_settings(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', settings={'PORT': '8080', 'SPRING_PROFILES_ACTIVE': 'production', 'DB_URL': 'jdbc:mysql://your-db-server:3306/your-db'})",
+          "method": "PUT",
+          "name": "update_app_settings",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "settings": "object (required) - Key-value pairs of environment variables",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "settings": {
+              "DB_URL": "jdbc:mysql://your-db-server:3306/your-db",
+              "PORT": "8080",
+              "SPRING_PROFILES_ACTIVE": "production"
+            },
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve runtime configuration, linuxFxVersion, alwaysOn, and startup command",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web",
+          "example_call": "get_site_config(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "POST",
+          "name": "get_site_config",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Update startup command, HTTP/2, AlwaysOn, or container settings",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web",
+          "example_call": "update_site_config(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', config={'linuxFxVersion': 'DOCKER|your-docker-image:latest', 'alwaysOn': True, 'http20Enabled': True, 'startupCommand': 'npm start'})",
+          "method": "PUT",
+          "name": "update_site_config",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "config": "object (required) - Configuration settings to update",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "config": {
+              "alwaysOn": true,
+              "http20Enabled": true,
+              "linuxFxVersion": "DOCKER|your-docker-image:latest",
+              "startupCommand": "npm start"
+            },
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Fetch recent container logs, docker logs, and HTTP stdout/stderr stream",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/logs",
+          "example_call": "get_app_service_logs(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_service_logs",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Pull real-time performance telemetry (CPU percentage, Memory working set, HTTP 5xx errors, Response Time)",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/metrics",
+          "example_call": "get_app_metrics(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_metrics",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Check health probe status and deployment readiness",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/health",
+          "example_call": "get_app_health_status(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "get_app_health_status",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List recent deployment history, commit IDs, and authors",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments",
+          "example_call": "list_deployments(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "list_deployments",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List active staging and production slots",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots",
+          "example_call": "list_deployment_slots(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service')",
+          "method": "GET",
+          "name": "list_deployment_slots",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Perform zero-downtime slot swap between staging and production",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slotName}/swap",
+          "example_call": "swap_deployment_slots(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', slot_name='staging')",
+          "method": "POST",
+          "name": "swap_deployment_slots",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "slot_name": "string (required) - Name of the deployment slot",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "resource_group": "your-resource-group",
+            "slot_name": "staging",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Scale App Service Plan tier or adjust instance count",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}",
+          "example_call": "scale_app_service_plan(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_plan_name='your-app-service-plan', sku={'name': 'P1v3', 'tier': 'PremiumV3', 'size': 'P1v3', 'family': 'Pv3', 'capacity': 2}, capacity=2)",
+          "method": "PUT",
+          "name": "scale_app_service_plan",
+          "params": {
+            "app_service_plan_name": "string (required) - Name of the App Service Plan",
+            "capacity": "integer (required) - Number of instances",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "sku": "object (required) - SKU details for scaling",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_plan_name": "your-app-service-plan",
+            "capacity": 2,
+            "resource_group": "your-resource-group",
+            "sku": {
+              "capacity": 2,
+              "family": "Pv3",
+              "name": "P1v3",
+              "size": "P1v3",
+              "tier": "PremiumV3"
+            },
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Admin",
+          "description": "Run diagnostic shell commands in the Kudu container environment",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/kudu/command",
+          "example_call": "execute_kudu_command(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', command='ls -la /home/site/wwwroot')",
+          "method": "POST",
+          "name": "execute_kudu_command",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "command": "string (required) - Shell command to execute",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "command": "ls -la /home/site/wwwroot",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Admin",
+          "description": "Read configuration or log files from the /home/site/wwwroot filesystem",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/vfs/{path}",
+          "example_call": "get_vfs_file_content(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', app_service_name='your-app-service', path='LogFiles/Application/Logs')",
+          "method": "GET",
+          "name": "get_vfs_file_content",
+          "params": {
+            "app_service_name": "string (required) - Name of the Web App",
+            "path": "string (required) - Path to the file in the VFS",
+            "resource_group": "string (required) - Azure Resource Group name",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "app_service_name": "your-app-service",
+            "path": "LogFiles/Application/Logs",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      ],
+      "last_evaluation": {
+        "passed": true,
+        "probe": "list_app_services",
+        "preview": "HTTP 200 OK: Found 2 resource(s) ['ai-mcp-platform-shakil', 'devops-vsp-sample-app-shakil']"
+      },
+      "scope": {}
+    },
+    "azure_virtual_machines": {
+      "id": "azure_virtual_machines",
+      "name": "Azure Virtual Machines",
+      "description": "Dynamically synthesized FastMCP Server for Azure Virtual Machines",
+      "category": "AI Synthesized Tool",
+      "transport": "stdio",
+      "created_at": "2026-09-20 05:54:16",
+      "all_tools": [
+        {
+          "category": "Query",
+          "description": "List all virtual machines in a resource group or subscription with power states",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines",
+          "example_call": "list_vms(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group')",
+          "method": "GET",
+          "name": "list_vms",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve VM size, OS type, computer name, private/public IP, and provisioning state",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}",
+          "example_call": "get_vm_details(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "get_vm_details",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Power on an allocated or stopped virtual machine",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/start",
+          "example_call": "start_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "start_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Gracefully shut down the guest operating system",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/powerOff",
+          "example_call": "stop_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "stop_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Deallocate compute resources to stop cloud billing",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/deallocate",
+          "example_call": "deallocate_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "deallocate_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Reboot the virtual machine operating system",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/restart",
+          "example_call": "restart_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "restart_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Move the virtual machine to a new Azure host node for hardware recovery",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/redeploy",
+          "example_call": "redeploy_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "redeploy_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Retrieve real-time power state, hypervisor health, and extension statuses",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/instanceView",
+          "example_call": "get_vm_instance_view(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "get_vm_instance_view",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Pull metrics for Percentage CPU, Available Memory, Network In/Out, and Disk Read/Write IOPS",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/metrics",
+          "example_call": "get_vm_metrics(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', metric_names='Percentage CPU,Available Memory,Network In,Network Out,Disk Read Operations/Sec,Disk Write Operations/Sec', timespan='PT1H')",
+          "method": "GET",
+          "name": "get_vm_metrics",
+          "params": {
+            "metric_names": "string (required) - Comma-separated list of metric names (e.g. Percentage CPU,Available Memory,Network In,Network Out,Disk Read Operations/Sec,Disk Write Operations/Sec)",
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "timespan": "string (optional) - Time span for the metrics (e.g. PT1H for 1 hour)",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "metric_names": "Percentage CPU,Available Memory,Network In,Network Out,Disk Read Operations/Sec,Disk Write Operations/Sec",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "timespan": "PT1H",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Retrieve VM console screenshot and serial console log output",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/bootDiagnostics",
+          "example_call": "get_boot_diagnostics(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "get_boot_diagnostics",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Execute shell scripts (Bash for Linux, PowerShell for Windows) directly inside the VM without SSH/RDP",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/runCommand",
+          "example_call": "run_vm_command(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', command_id='RunShellScript', script='echo \"Hello, World!\"')",
+          "method": "POST",
+          "name": "run_vm_command",
+          "params": {
+            "command_id": "string (required) - Command ID (e.g. RunShellScript for Linux, RunPowerShellScript for Windows)",
+            "resource_group": "string (required) - Azure Resource Group",
+            "script": "string (required) - Script content to execute",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "command_id": "RunShellScript",
+            "resource_group": "your-resource-group",
+            "script": "echo 'Hello, World!'",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Check output, exit code, and execution history of a triggered script",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/runCommand/{commandId}",
+          "example_call": "get_run_command_status(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', command_id='00000000-0000-0000-0000-000000000000')",
+          "method": "GET",
+          "name": "get_run_command_status",
+          "params": {
+            "command_id": "string (required) - Command ID returned by run_vm_command",
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "command_id": "00000000-0000-0000-0000-000000000000",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List OS disk and attached managed data disks with sizes, caching, and LUNs",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/disks",
+          "example_call": "list_vm_disks(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "list_vm_disks",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Attach a managed data disk to the VM",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/attachDataDisk",
+          "example_call": "attach_data_disk(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', disk_name='your-disk-name', lun=0, caching='ReadWrite', size_gb=100)",
+          "method": "POST",
+          "name": "attach_data_disk",
+          "params": {
+            "caching": "string (optional) - Caching type (e.g. None, ReadOnly, ReadWrite)",
+            "disk_name": "string (required) - Name of the managed data disk",
+            "lun": "integer (required) - Logical Unit Number (LUN) for the disk",
+            "resource_group": "string (required) - Azure Resource Group",
+            "size_gb": "integer (optional) - Size of the disk in GB",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "caching": "ReadWrite",
+            "disk_name": "your-disk-name",
+            "lun": 0,
+            "resource_group": "your-resource-group",
+            "size_gb": 100,
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Safely detach a data disk by LUN or disk name",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/detachDataDisk",
+          "example_call": "detach_data_disk(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', disk_name='your-disk-name', lun=0)",
+          "method": "POST",
+          "name": "detach_data_disk",
+          "params": {
+            "disk_name": "string (optional) - Name of the managed data disk",
+            "lun": "integer (optional) - Logical Unit Number (LUN) for the disk",
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "disk_name": "your-disk-name",
+            "lun": 0,
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List supported VM SKUs and CPU/memory specifications in the region",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/vmSizes",
+          "example_call": "list_available_vm_sizes(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "list_available_vm_sizes",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Change the VM compute SKU (e.g. Standard_B2s to Standard_D4s_v5)",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/resize",
+          "example_call": "resize_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', vm_size='Standard_D4s_v5')",
+          "method": "POST",
+          "name": "resize_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name",
+            "vm_size": "string (required) - New VM size (e.g. Standard_D4s_v5)"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name",
+            "vm_size": "Standard_D4s_v5"
+          }
+        }
+      ],
+      "enabled_tools": [
+        "list_vms",
+        "get_vm_details",
+        "start_vm",
+        "stop_vm",
+        "deallocate_vm",
+        "restart_vm",
+        "redeploy_vm",
+        "get_vm_instance_view",
+        "get_vm_metrics",
+        "get_boot_diagnostics",
+        "run_vm_command",
+        "get_run_command_status",
+        "list_vm_disks",
+        "attach_data_disk",
+        "detach_data_disk",
+        "list_available_vm_sizes",
+        "resize_vm"
+      ],
+      "tools": [
+        {
+          "category": "Query",
+          "description": "List all virtual machines in a resource group or subscription with power states",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines",
+          "example_call": "list_vms(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group')",
+          "method": "GET",
+          "name": "list_vms",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "Retrieve VM size, OS type, computer name, private/public IP, and provisioning state",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}",
+          "example_call": "get_vm_details(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "get_vm_details",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Power on an allocated or stopped virtual machine",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/start",
+          "example_call": "start_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "start_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Gracefully shut down the guest operating system",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/powerOff",
+          "example_call": "stop_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "stop_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Deallocate compute resources to stop cloud billing",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/deallocate",
+          "example_call": "deallocate_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "deallocate_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Reboot the virtual machine operating system",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/restart",
+          "example_call": "restart_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "restart_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Move the virtual machine to a new Azure host node for hardware recovery",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/redeploy",
+          "example_call": "redeploy_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "POST",
+          "name": "redeploy_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Retrieve real-time power state, hypervisor health, and extension statuses",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/instanceView",
+          "example_call": "get_vm_instance_view(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "get_vm_instance_view",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Pull metrics for Percentage CPU, Available Memory, Network In/Out, and Disk Read/Write IOPS",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/metrics",
+          "example_call": "get_vm_metrics(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', metric_names='Percentage CPU,Available Memory,Network In,Network Out,Disk Read Operations/Sec,Disk Write Operations/Sec', timespan='PT1H')",
+          "method": "GET",
+          "name": "get_vm_metrics",
+          "params": {
+            "metric_names": "string (required) - Comma-separated list of metric names (e.g. Percentage CPU,Available Memory,Network In,Network Out,Disk Read Operations/Sec,Disk Write Operations/Sec)",
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "timespan": "string (optional) - Time span for the metrics (e.g. PT1H for 1 hour)",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "metric_names": "Percentage CPU,Available Memory,Network In,Network Out,Disk Read Operations/Sec,Disk Write Operations/Sec",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "timespan": "PT1H",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Retrieve VM console screenshot and serial console log output",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/bootDiagnostics",
+          "example_call": "get_boot_diagnostics(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "get_boot_diagnostics",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Execute shell scripts (Bash for Linux, PowerShell for Windows) directly inside the VM without SSH/RDP",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/runCommand",
+          "example_call": "run_vm_command(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', command_id='RunShellScript', script='echo \"Hello, World!\"')",
+          "method": "POST",
+          "name": "run_vm_command",
+          "params": {
+            "command_id": "string (required) - Command ID (e.g. RunShellScript for Linux, RunPowerShellScript for Windows)",
+            "resource_group": "string (required) - Azure Resource Group",
+            "script": "string (required) - Script content to execute",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "command_id": "RunShellScript",
+            "resource_group": "your-resource-group",
+            "script": "echo 'Hello, World!'",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Monitoring",
+          "description": "Check output, exit code, and execution history of a triggered script",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/runCommand/{commandId}",
+          "example_call": "get_run_command_status(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', command_id='00000000-0000-0000-0000-000000000000')",
+          "method": "GET",
+          "name": "get_run_command_status",
+          "params": {
+            "command_id": "string (required) - Command ID returned by run_vm_command",
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "command_id": "00000000-0000-0000-0000-000000000000",
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List OS disk and attached managed data disks with sizes, caching, and LUNs",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/disks",
+          "example_call": "list_vm_disks(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "list_vm_disks",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Attach a managed data disk to the VM",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/attachDataDisk",
+          "example_call": "attach_data_disk(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', disk_name='your-disk-name', lun=0, caching='ReadWrite', size_gb=100)",
+          "method": "POST",
+          "name": "attach_data_disk",
+          "params": {
+            "caching": "string (optional) - Caching type (e.g. None, ReadOnly, ReadWrite)",
+            "disk_name": "string (required) - Name of the managed data disk",
+            "lun": "integer (required) - Logical Unit Number (LUN) for the disk",
+            "resource_group": "string (required) - Azure Resource Group",
+            "size_gb": "integer (optional) - Size of the disk in GB",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "caching": "ReadWrite",
+            "disk_name": "your-disk-name",
+            "lun": 0,
+            "resource_group": "your-resource-group",
+            "size_gb": 100,
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Safely detach a data disk by LUN or disk name",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/detachDataDisk",
+          "example_call": "detach_data_disk(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', disk_name='your-disk-name', lun=0)",
+          "method": "POST",
+          "name": "detach_data_disk",
+          "params": {
+            "disk_name": "string (optional) - Name of the managed data disk",
+            "lun": "integer (optional) - Logical Unit Number (LUN) for the disk",
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "disk_name": "your-disk-name",
+            "lun": 0,
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Query",
+          "description": "List supported VM SKUs and CPU/memory specifications in the region",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/vmSizes",
+          "example_call": "list_available_vm_sizes(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name')",
+          "method": "GET",
+          "name": "list_available_vm_sizes",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name"
+          }
+        },
+        {
+          "category": "Action",
+          "description": "Change the VM compute SKU (e.g. Standard_B2s to Standard_D4s_v5)",
+          "endpoint": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/resize",
+          "example_call": "resize_vm(subscription_id='00000000-0000-0000-0000-000000000000', resource_group='your-resource-group', vm_name='your-vm-name', vm_size='Standard_D4s_v5')",
+          "method": "POST",
+          "name": "resize_vm",
+          "params": {
+            "resource_group": "string (required) - Azure Resource Group",
+            "subscription_id": "string (required) - Azure Subscription ID",
+            "vm_name": "string (required) - Virtual Machine Name",
+            "vm_size": "string (required) - New VM size (e.g. Standard_D4s_v5)"
+          },
+          "sample_args": {
+            "resource_group": "your-resource-group",
+            "subscription_id": "00000000-0000-0000-0000-000000000000",
+            "vm_name": "your-vm-name",
+            "vm_size": "Standard_D4s_v5"
+          }
+        }
+      ],
+      "last_evaluation": {
+        "passed": true,
+        "probe": "list_resource_groups",
+        "preview": "HTTP 200 OK: Found 12 resource(s) ['VisualStudioOnline-72EA031748974AC9B5D1BB0E78CEBFA2', 'rg-test-southindia', 'rg-devops-vsp', 'rg-test-centralindia', 'rg-test-eastus']"
+      },
+      "scope": {}
+    }
+  }
 }
