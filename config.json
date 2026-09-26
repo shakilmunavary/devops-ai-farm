@@ -1098,9 +1098,9 @@
         {
           "category": "Action",
           "description": "Append internal technical work notes (e.g. diagnostics, AI RCA root cause analysis)",
-          "endpoint": "/api/now/table/incident/{sys_id}/work_notes",
+          "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "add_work_note(sys_id='INC1234567', work_notes='Server rebooted and is now operational')",
-          "method": "POST",
+          "method": "PATCH",
           "name": "add_work_note",
           "params": {
             "sys_id": "required - Incident sys_id",
@@ -1512,9 +1512,9 @@
         {
           "category": "Action",
           "description": "Append internal technical work notes (e.g. diagnostics, AI RCA root cause analysis)",
-          "endpoint": "/api/now/table/incident/{sys_id}/work_notes",
+          "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "add_work_note(sys_id='INC1234567', work_notes='Server rebooted and is now operational')",
-          "method": "POST",
+          "method": "PATCH",
           "name": "add_work_note",
           "params": {
             "sys_id": "required - Incident sys_id",

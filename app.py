@@ -503,6 +503,9 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         target_endpoint = re.sub(r'\\{{(?:org(?:anization)?(?:_?name)?|owner)\\}}', lambda m: str(org_val), target_endpoint, flags=re.IGNORECASE)
     if proj_val:
         target_endpoint = re.sub(r'\\{{(?:project(?:_?(?:name|id|key))?|projectId)\\}}', lambda m: str(proj_val), target_endpoint, flags=re.IGNORECASE)
+    repo_val = args.get("repositoryId") or args.get("repository_id") or args.get("repository") or args.get("repo") or args.get("repo_name") or ""
+    if repo_val:
+        target_endpoint = re.sub(r'\\{{(?:repository(?:_?id)?|repositoryId|repo(?:_?name)?)\\}}', lambda m: str(repo_val), target_endpoint, flags=re.IGNORECASE)
 
     # Azure ARM: Auto-format ARM endpoint and API version (only for Azure ARM, not Azure DevOps)
     is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
