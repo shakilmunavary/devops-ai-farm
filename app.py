@@ -284,7 +284,23 @@ def get_credentials() -> Dict[str, str]:
 
     # Hard-pin base URLs per platform to prevent ANY cross-server pollution
     if any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"]):
-        creds["base_url"] = f"https://dev.azure.com/{{org}}" if org else "https://dev.azure.com"
+        existing_base = creds.get("base_url", "")
+        if not org and "dev.azure.com" in existing_base:
+            m_org = re.search(r'dev\\.azure\\.com/([^/?#]+)', existing_base)
+            if m_org:
+                org = m_org.group(1).strip()
+        elif not org and ".visualstudio.com" in existing_base:
+            m_org = re.search(r'https?://([^/?#\\.]+)\\.visualstudio\\.com', existing_base)
+            if m_org:
+                org = m_org.group(1).strip()
+        if not org:
+            org = creds.get("org") or creds.get("organization") or creds.get("organization_name") or creds.get("account") or creds.get("workspace") or ""
+
+        if org:
+            creds["base_url"] = f"https://dev.azure.com/{{org}}"
+            creds["org"] = org
+        elif not existing_base or "api.service.com" in existing_base:
+            creds["base_url"] = "https://dev.azure.com"
     elif any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
         creds["base_url"] = "https://management.azure.com"
     elif any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
@@ -513,16 +529,24 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         needs_project_scoping = any(sub in target_endpoint for sub in ["/_apis/git", "/_apis/pipelines", "/_apis/build", "/_apis/wit", "/_apis/work", "/_apis/release", "/_apis/distributedtask", "/_apis/serviceendpoint"]) or re.search(r'\\{{(?:project(?:_?(?:name|id|key))?|projectId)\\}}', target_endpoint)
 
         if needs_project_scoping:
-            # Smart discovery: If proj_val is missing, resolve dynamically via /_apis/projects
+            # Smart discovery: If proj_val is missing, resolve dynamically via /_apis/projects or /_apis/git/repositories
             if not proj_val:
                 try:
-                    with httpx.Client(verify=False, auth=auth, headers=headers, timeout=6.0) as p_client:
+                    with httpx.Client(verify=False, headers=headers, timeout=6.0, follow_redirects=True) as p_client:
                         p_res = p_client.get(f"{{base}}/_apis/projects", params={{"api-version": "7.1", "$top": 10}})
                         if p_res.status_code == 200:
                             p_data = p_res.json()
                             p_list = p_data.get("value", []) if isinstance(p_data, dict) else []
                             if p_list and isinstance(p_list, list) and len(p_list) > 0:
                                 proj_val = p_list[0].get("name", "")
+
+                        if not proj_val:
+                            r_res = p_client.get(f"{{base}}/_apis/git/repositories", params={{"api-version": "7.1"}})
+                            if r_res.status_code == 200:
+                                r_data = r_res.json()
+                                r_list = r_data.get("value", []) if isinstance(r_data, dict) else []
+                                if r_list and isinstance(r_list, list) and len(r_list) > 0:
+                                    proj_val = (r_list[0].get("project") or {{}}).get("name", "") or r_list[0].get("name", "")
                 except Exception:
                     pass
 
