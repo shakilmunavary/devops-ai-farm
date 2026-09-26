@@ -1741,6 +1741,12 @@ def get_bot_logs(bot_id):
     return jsonify({
         "bot_id": bot_id,
         "name": bot.get("name"),
+        "description": bot.get("description"),
+        "instructions": bot.get("instructions"),
+        "tools_required": bot.get("tools_required", []),
+        "workflow_steps": bot.get("workflow_steps", []),
+        "context_config": bot.get("context_config", {}),
+        "schedule": bot.get("schedule", {}),
         "run_count": bot.get("run_count", 0),
         "last_run": bot.get("last_run"),
         "run_history": bot.get("run_history", [])

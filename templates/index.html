@@ -1710,6 +1710,49 @@
             line-height: 1.5;
             border: 1px solid rgba(56, 189, 248, 0.2);
         }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 99999;
+            pointer-events: none;
+        }
+        .toast-message {
+            background: #0f172a;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #f8fafc;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(56, 189, 248, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: toastSlideIn 0.25s ease-out forwards;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: auto;
+        }
+        .toast-message.toast-success {
+            border-color: rgba(34, 197, 94, 0.6);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(34, 197, 94, 0.25);
+        }
+        .toast-message.toast-error {
+            border-color: rgba(239, 68, 68, 0.6);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(239, 68, 68, 0.25);
+        }
+        .toast-message.toast-info {
+            border-color: rgba(56, 189, 248, 0.6);
+        }
+        @keyframes toastSlideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -1985,6 +2028,18 @@
                         <label>Credential Vault</label>
                         <span id="info-creds-location">mcp_servers/.../.env</span>
                     </div>
+                </div>
+
+                <div class="server-prompt-card" style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 18px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                            💬 MCP Server Purpose & Discovery Prompt
+                        </span>
+                        <button class="btn-chip-action" style="font-size: 11px; padding: 3px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="copyActiveServerPrompt()">
+                            📋 Copy Prompt
+                        </button>
+                    </div>
+                    <div id="server-prompt-text" style="font-size: 12.5px; color: #cbd5e1; font-family: var(--font-mono); line-height: 1.5; white-space: pre-wrap; background: rgba(0,0,0,0.35); padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);"></div>
                 </div>
 
                 <div class="tools-section">
@@ -2559,9 +2614,87 @@
             }
         }
 
+        function showToast(message, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast-message toast-${type}`;
+            let icon = 'ℹ️';
+            if (type === 'success') icon = '✅';
+            if (type === 'error') icon = '❌';
+            if (type === 'warn') icon = '⚠️';
+            toast.innerHTML = `<span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => toast.remove(), 350);
+            }, 3200);
+        }
+
+        function copyText(text, label = "📋 Copied to clipboard!") {
+            if (!text) return;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast(label, "success");
+                }).catch(() => fallbackCopy(text, label));
+            } else {
+                fallbackCopy(text, label);
+            }
+        }
+
+        function fallbackCopy(text, label) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            textArea.style.top = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast(label, "success");
+            } catch (err) {
+                alert("Copied: " + text);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function copyBotPrompt(botId) {
+            const bot = allBots[botId] || {};
+            const text = bot.instructions || bot.description || '';
+            if (!text) {
+                showToast("No prompt found for this bot", "error");
+                return;
+            }
+            copyText(text, "📋 Bot initial prompt copied to clipboard!");
+        }
+
+        function copyCatalogPromptBySysId(sysId) {
+            const cat = window._aiopsCatalogsMap ? window._aiopsCatalogsMap[sysId] : null;
+            if (!cat) {
+                showToast("Catalog not found", "error");
+                return;
+            }
+            const text = cat.sop_markdown || cat.sop || cat.short_description || '';
+            copyText(text, `📋 SOP Prompt for ${cat.name || 'Catalog'} copied!`);
+        }
+
+        function copyActiveServerPrompt() {
+            if (!activeServerId || !servers[activeServerId]) return;
+            const s = servers[activeServerId];
+            const text = s.description || `${s.name} MCP Server with tools: ${(s.tools || []).map(t => t.name).join(', ')}`;
+            copyText(text, `📋 Prompt / Purpose for ${s.name || activeServerId} copied!`);
+        }
+
         function copyGatewayKey() {
-            navigator.clipboard.writeText(gatewayApiKey);
-            alert('Copied to clipboard!');
+            copyText(gatewayApiKey, '🔑 Gateway Key copied to clipboard!');
         }
 
         async function fetchServers() {
@@ -2632,6 +2765,10 @@
 
             document.getElementById('server-name-heading').textContent = s.name || key;
             document.getElementById('server-desc-heading').textContent = s.description || '';
+            const promptEl = document.getElementById('server-prompt-text');
+            if (promptEl) {
+                promptEl.textContent = s.description || `${s.name || key} MCP Server for autonomous AI tool discovery and workflow execution`;
+            }
             const gatewayBaseUrl = window.location.origin;
             document.getElementById('info-gateway-endpoint').textContent = `${gatewayBaseUrl}/mcp/${key}`;
             document.getElementById('info-creds-location').textContent = `mcp_servers/${key}/.env`;
@@ -3908,7 +4045,20 @@
                         </span>
                     </div>
 
-                    <div class="bot-desc">${escapeHtml(bot.description || bot.instructions)}</div>
+                    <div class="bot-desc" style="margin-bottom: 6px;">${escapeHtml(bot.description || '')}</div>
+
+                    <!-- Prompt Placeholder Box with Copy Button -->
+                    <div class="bot-prompt-box" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px 12px; margin: 8px 0 10px 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <span style="font-size: 10.5px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px;">
+                                💬 Initial Prompt / Mission Instructions:
+                            </span>
+                            <button class="btn-chip-action" style="font-size: 10px; padding: 2px 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="copyBotPrompt('${botId}')" title="Copy initial prompt to clipboard">
+                                📋 Copy Prompt
+                            </button>
+                        </div>
+                        <div style="font-size: 11.5px; color: #cbd5e1; line-height: 1.45; font-family: var(--font-mono); white-space: pre-wrap; max-height: 75px; overflow-y: auto; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">${escapeHtml(bot.instructions || bot.description || 'No specific prompt recorded.')}</div>
+                    </div>
 
                     <div class="bot-context-tags">
                         ${schedTag}
@@ -4506,9 +4656,29 @@
 
                 title.innerHTML = `📜 ${escapeHtml(data.name || botId)} - BOT Log`;
 
+                const botPrompt = data.instructions || data.description || (allBots[botId] && (allBots[botId].instructions || allBots[botId].description)) || 'Autonomous mission instructions';
+
+                const promptCard = `
+                    <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 11.5px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                                    💬 Configured Prompt & Mission Instructions
+                                </span>
+                                <span class="badge badge-ok" style="font-size: 10px;">Active Mission</span>
+                            </div>
+                            <button class="btn-chip-action" style="font-size: 11px; padding: 3px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="copyBotPrompt('${botId}')">
+                                📋 Copy Prompt
+                            </button>
+                        </div>
+                        <div style="font-size: 12px; color: #e2e8f0; font-family: var(--font-mono); line-height: 1.5; white-space: pre-wrap; background: rgba(0,0,0,0.4); padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); max-height: 130px; overflow-y: auto;">${escapeHtml(botPrompt)}</div>
+                    </div>
+                `;
+
                 const history = data.run_history || [];
                 if (history.length === 0) {
                     body.innerHTML = `
+                        ${promptCard}
                         <div style="text-align: center; color: var(--text-muted); padding: 40px;">
                             <h3>No Execution History Yet</h3>
                             <p style="font-size: 13px; margin-top: 6px;">Click <strong>⚡ Trigger Once</strong> on the dashboard to trigger this bot's autonomous workflow.</p>
@@ -4517,7 +4687,7 @@
                     return;
                 }
 
-                body.innerHTML = '';
+                body.innerHTML = promptCard;
 
                 history.forEach((run, idx) => {
                     const rca = run.rca || {};
@@ -5075,13 +5245,24 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
                         <div class="catbody" style="flex: 1;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                                 <div class="name" style="color: #60a5fa; font-weight: 700;">${cat.name}</div>
-                                <span style="font-size: 11px; color: var(--text-muted); background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); padding: 2px 6px; border-radius: 4px;">🔍 Click to View Details</span>
+                                <span style="font-size: 11px; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); padding: 2px 8px; border-radius: 4px;">🔍 Click to View Details</span>
                             </div>
                             <div class="desc">${cat.short_description || "SOP-driven autonomous catalog"}</div>
-                            <div class="approval">${approvalText}</div>
+
+                            <!-- Prompt / SOP Placeholder Snippet -->
+                            <div style="margin-top: 8px; background: rgba(15, 23, 42, 0.04); border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-size: 10.5px; font-weight: 700; color: #0284c7; text-transform: uppercase;">💬 Configured Prompt / SOP Runbook:</span>
+                                    <button class="btn-ai-ghost" style="padding: 2px 6px; font-size: 10.5px;" onclick="event.stopPropagation(); copyCatalogPromptBySysId('${cat.sys_id}')" title="Copy SOP prompt to clipboard">📋 Copy Prompt</button>
+                                </div>
+                                <div style="font-size: 11.5px; color: #475569; font-family: var(--ai-mono); white-space: pre-wrap; max-height: 55px; overflow-y: auto; line-height: 1.4;">${escapeHtml((cat.sop_markdown || cat.sop || cat.short_description || 'Autonomous SOP runbook').substring(0, 220))}...</div>
+                            </div>
+
+                            <div class="approval" style="margin-top: 6px;">${approvalText}</div>
                             <div class="chips">${chips}</div>
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 6px; justify-content: center; margin-left: 8px;">
+                            <button class="btn-ai-ghost" type="button" style="font-size: 11px; padding: 4px 8px;" onclick="event.stopPropagation(); showCatalogDetailsModal('${cat.sys_id}')">📜 View Prompt</button>
                             <button class="btn-ai-danger" type="button" onclick="deleteConsoleCatalog(event, '${cat.sys_id}', '${cat.name}')">Delete</button>
                         </div>
                     `;
@@ -5170,11 +5351,7 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
 
         function copyCatalogPrompt() {
             if (currentDetailSopMarkdown) {
-                navigator.clipboard.writeText(currentDetailSopMarkdown).then(() => {
-                    showToast("📋 SOP Prompt copied to clipboard!");
-                }).catch(err => {
-                    showToast("Failed to copy prompt: " + err, "error");
-                });
+                copyText(currentDetailSopMarkdown, "📋 SOP Prompt copied to clipboard!");
             }
         }
 
