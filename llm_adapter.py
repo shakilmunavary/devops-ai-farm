@@ -44,8 +44,8 @@ PROVIDER_PRESETS = {
     "mistral": {
         "name": "Mistral AI",
         "base_url": "https://api.mistral.ai/v1/chat/completions",
-        "default_model": "mistral-large-latest",
-        "supported_models": ["mistral-large-latest", "codestral-latest", "open-mistral-nemo", "ministral-8b-latest", "mistral-small-latest"],
+        "default_model": "codestral-latest",
+        "supported_models": ["codestral-latest", "open-mistral-nemo", "ministral-8b-latest", "mistral-large-latest", "mistral-small-latest"],
         "auth_type": "bearer",
         "env_key": "MISTRAL_API_KEY"
     },
