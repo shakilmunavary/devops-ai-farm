@@ -232,6 +232,11 @@ def get_credentials() -> Dict[str, str]:
         if k not in raw_env and v:
             raw_env[k] = str(v)
 
+    srv_lower = "{server_id}".lower()
+    is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
+    is_arm = not is_ado and any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"])
+    is_snow = any(w in srv_lower for w in ["servicenow", "service_now", "snow"])
+
     for k, v in (raw_env or {{}}).items():
         if not v:
             continue
@@ -243,11 +248,13 @@ def get_credentials() -> Dict[str, str]:
         elif k_upper in ["CLIENT_ID", "APP_ID", "AZURE_CLIENT_ID", "AZURE_APP_ID"]:
             creds["client_id"] = v_str
             creds["azure_client_id"] = v_str
-            creds["username"] = v_str
+            if is_arm:
+                creds["username"] = v_str
         elif k_upper in ["CLIENT_SECRET", "APP_SECRET", "AZURE_CLIENT_SECRET", "AZURE_APP_SECRET"]:
             creds["client_secret"] = v_str
             creds["azure_client_secret"] = v_str
-            creds["auth_val"] = v_str
+            if is_arm:
+                creds["auth_val"] = v_str
         elif k_upper in ["SUBSCRIPTION_ID", "SUBSCRIPTION", "SUB_ID", "AZURE_SUBSCRIPTION_ID"]:
             creds["subscription_id"] = v_str
             creds["azure_subscription_id"] = v_str
@@ -271,13 +278,21 @@ def get_credentials() -> Dict[str, str]:
             creds["token"] = v_str
             creds["pat"] = v_str
         elif k_upper in ["USERNAME", "USER_ID", "EMAIL", "USER", "LOGIN"]:
-            creds["username"] = v_str
+            if not is_ado:
+                creds["username"] = v_str
         elif k_upper in ["BASE_URL", "URL", "HOST", "ENDPOINT"]:
             creds["base_url"] = v_str
         else:
             creds[str(k).lower()] = v_str
 
-    srv_lower = "{server_id}".lower()
+    if is_ado:
+        creds["username"] = ""
+        for pat_k in ["PERSONAL_ACCESS_TOKEN", "PAT", "AZURE_DEVOPS_PAT", "TOKEN"]:
+            if pat_k in raw_env and raw_env[pat_k]:
+                creds["auth_val"] = str(raw_env[pat_k]).strip()
+                creds["token"] = str(raw_env[pat_k]).strip()
+                creds["pat"] = str(raw_env[pat_k]).strip()
+                break
     org = creds.get("org") or creds.get("organization") or creds.get("organization_name") or ""
     proj = creds.get("project") or creds.get("project_name") or ""
     inst = creds.get("instance") or creds.get("instance_name") or ""
@@ -347,7 +362,7 @@ def get_headers_and_auth(creds: Dict[str, str]):
         if p:
             b64_val = base64.b64encode(f":{{p}}".encode("utf-8")).decode("utf-8")
             headers["Authorization"] = f"Basic {{b64_val}}"
-            auth = ("", p)
+            auth = None
     # 3. Azure OAuth2 Client Credentials
     elif any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
         tenant = creds.get("tenant_id") or creds.get("azure_tenant_id") or ""

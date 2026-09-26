@@ -576,15 +576,12 @@ def fetch_container_logs(container_name: str) -> str:
 
 def parse_output_as_data(text_out: str, raw_data: Any) -> Any:
     """Attempts to parse tool output as structured JSON/dict/list."""
-    if isinstance(raw_data, (dict, list)):
-        if isinstance(raw_data, dict) and "result" in raw_data and isinstance(raw_data["result"], (dict, list)):
-            return raw_data["result"]
-        return raw_data
+    clean_text = str(text_out or "").strip()
+    if not clean_text and isinstance(raw_data, dict) and "content" in raw_data:
+        for item in raw_data.get("content", []):
+            if isinstance(item, dict) and item.get("type") == "text":
+                clean_text += item.get("text", "")
 
-    if not text_out:
-        return {}
-
-    clean_text = str(text_out).strip()
     if "```json" in clean_text:
         try:
             json_str = clean_text.split("```json")[1].split("```")[0].strip()
@@ -598,10 +595,20 @@ def parse_output_as_data(text_out: str, raw_data: Any) -> Any:
         except Exception:
             pass
 
-    try:
-        return json.loads(clean_text)
-    except Exception:
-        pass
+    if clean_text:
+        try:
+            return json.loads(clean_text)
+        except Exception:
+            pass
+
+    if isinstance(raw_data, (dict, list)):
+        if isinstance(raw_data, dict):
+            if "result" in raw_data and isinstance(raw_data["result"], (dict, list)):
+                return raw_data["result"]
+            if "content" not in raw_data:
+                return raw_data
+        else:
+            return raw_data
 
     return {"text": clean_text}
 
