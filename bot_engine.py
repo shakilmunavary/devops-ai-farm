@@ -1110,15 +1110,50 @@ def execute_autonomous_agent_flow(bot: Dict[str, Any], trigger_reason: str, star
     }
 
 
+# Global Concurrency Locks: Prevents overlapping workflow runs for the same bot
+_BOT_EXECUTION_LOCKS: Dict[str, threading.Lock] = {}
+_BOT_EXECUTION_LOCKS_GUARD = threading.Lock()
+
+def _get_bot_execution_lock(bot_id: str) -> threading.Lock:
+    with _BOT_EXECUTION_LOCKS_GUARD:
+        if bot_id not in _BOT_EXECUTION_LOCKS:
+            _BOT_EXECUTION_LOCKS[bot_id] = threading.Lock()
+        return _BOT_EXECUTION_LOCKS[bot_id]
+
+
 def run_bot_workflow(bot_id: str, trigger_reason: str = "Manual Trigger", _is_internal: bool = False) -> Dict[str, Any]:
     """
     Executes the bot's workflow 100% dynamically based on its configured definition.
-    Agnostic to use case (ADO pipeline guardian, GitHub review, VM operations, App Service monitoring, ServiceNow triage, or hybrid DevOps orchestration).
+    Guarantees strict concurrency control: if a workflow run is already active, overlapping runs are safely ignored.
     """
     bot = bot_registry.get_bot(bot_id)
     if not bot:
         return {"success": False, "error": f"Bot {bot_id} not found."}
 
+    # Concurrency Guard: Ensure only ONE execution runs per bot at any given moment
+    lock = None
+    if not _is_internal:
+        lock = _get_bot_execution_lock(bot_id)
+        if not lock.acquire(blocking=False):
+            logger.warning(f"⚠️ [Concurrency Guard] Bot '{bot_id}' is already executing an active workflow task. Skipping overlapping run ({trigger_reason}).")
+            return {
+                "success": True,
+                "status": "busy",
+                "summary": f"Bot '{bot_id}' is currently busy executing a previous workflow run. Overlapping polling trigger ignored.",
+                "skipped_due_to_active_execution": True
+            }
+
+    try:
+        return _execute_bot_pipeline(bot, bot_id, trigger_reason, _is_internal)
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except RuntimeError:
+                pass
+
+
+def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str, _is_internal: bool) -> Dict[str, Any]:
     start_time = datetime.now()
     timestamp_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
