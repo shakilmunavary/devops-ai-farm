@@ -2391,10 +2391,14 @@
                 <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="font-size: 12px; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;">
-                            📜 Prompt / SOP Runbook Details
+                            📜 Configured Prompt / SOP Runbook
                         </div>
-                        <button class="btn-chip-action" onclick="copyCatalogPrompt()" style="font-size: 11px; padding: 4px 10px;">📋 Copy Prompt</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-chip-action" id="btn-toggle-sop-format" onclick="toggleCatalogSopView()" style="font-size: 11px; padding: 4px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;">👁️ Formatted View</button>
+                            <button class="btn-chip-action" onclick="copyCatalogPrompt()" style="font-size: 11px; padding: 4px 10px;">📋 Copy Prompt</button>
+                        </div>
                     </div>
+                    <div id="cat-detail-sop-rendered" style="margin: 0; background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13px; max-height: 280px; overflow-y: auto; line-height: 1.6; display: none;"></div>
                     <pre id="cat-detail-sop" style="margin: 0; background: #0b1120; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; font-family: var(--font-mono); font-size: 12px; color: #93c5fd; white-space: pre-wrap; max-height: 280px; overflow-y: auto; line-height: 1.5;"></pre>
                 </div>
             </div>
@@ -2682,7 +2686,8 @@
                 showToast("Catalog not found", "error");
                 return;
             }
-            const text = cat.sop_markdown || cat.sop || cat.short_description || '';
+            const raw = cat.sop_markdown || cat.sop || cat.short_description || '';
+            const text = stripHtml(raw);
             copyText(text, `📋 SOP Prompt for ${cat.name || 'Catalog'} copied!`);
         }
 
@@ -3001,6 +3006,20 @@
                 .replace(/>/g, "&gt;")
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
+        }
+
+        function stripHtml(htmlStr) {
+            if (htmlStr === null || htmlStr === undefined) return '';
+            let str = String(htmlStr);
+            // Replace line breaking HTML tags with appropriate whitespace
+            str = str.replace(/<br\s*[\/]?>/gi, "\n");
+            str = str.replace(/<\/(p|div|tr|h[1-6]|li)>/gi, "\n");
+            str = str.replace(/<li[^>]*>/gi, "• ");
+            str = str.replace(/<[^>]+>/g, "");
+            const tmp = document.createElement("textarea");
+            tmp.innerHTML = str;
+            let decoded = tmp.value || "";
+            return decoded.replace(/\n\s*\n\s*\n+/g, "\n\n").trim();
         }
 
         async function reloadCurrentServer() {
@@ -5241,6 +5260,9 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
                         ? `🔒 Approval required · Approver: ${cat.approver_name || cat.approver_sys_id || 'Designated Lead'}`
                         : `⚡ Auto-Execution (No Approval Required)`;
 
+                    const rawSop = cat.sop_markdown || cat.sop || cat.short_description || 'Autonomous SOP runbook';
+                    const cleanPromptSnippet = stripHtml(rawSop);
+
                     d.innerHTML = `
                         <div class="catbody" style="flex: 1;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
@@ -5255,7 +5277,7 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
                                     <span style="font-size: 10.5px; font-weight: 700; color: #0284c7; text-transform: uppercase;">💬 Configured Prompt / SOP Runbook:</span>
                                     <button class="btn-ai-ghost" style="padding: 2px 6px; font-size: 10.5px;" onclick="event.stopPropagation(); copyCatalogPromptBySysId('${cat.sys_id}')" title="Copy SOP prompt to clipboard">📋 Copy Prompt</button>
                                 </div>
-                                <div style="font-size: 11.5px; color: #475569; font-family: var(--ai-mono); white-space: pre-wrap; max-height: 55px; overflow-y: auto; line-height: 1.4;">${escapeHtml((cat.sop_markdown || cat.sop || cat.short_description || 'Autonomous SOP runbook').substring(0, 220))}...</div>
+                                <div style="font-size: 11.5px; color: #475569; font-family: var(--ai-mono); white-space: pre-wrap; max-height: 55px; overflow-y: auto; line-height: 1.4;">${escapeHtml(cleanPromptSnippet.substring(0, 240))}...</div>
                             </div>
 
                             <div class="approval" style="margin-top: 6px;">${approvalText}</div>
@@ -5282,8 +5304,11 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
         }
 
         function showCatalogDetailsModal(sysId) {
-            const cat = window._aiopsCatalogsMap ? window._aiopsCatalogsMap[sysId] : null;
-            if (!cat) return;
+            const cat = (window._aiopsCatalogsMap && window._aiopsCatalogsMap[sysId]) || null;
+            if (!cat) {
+                console.warn("Catalog not found for sys_id:", sysId);
+                return;
+            }
 
             document.getElementById("cat-detail-title").textContent = cat.name || "AIOps Catalog";
             document.getElementById("cat-detail-sysid").textContent = `ServiceNow SysID: ${cat.sys_id || sysId}`;
@@ -5329,8 +5354,26 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
             }
 
             // SOP / Prompt
-            currentDetailSopMarkdown = cat.sop_markdown || cat.sop || "No specific SOP prompt defined.";
-            document.getElementById("cat-detail-sop").textContent = currentDetailSopMarkdown;
+            const rawSop = cat.sop_markdown || cat.sop || "No specific SOP prompt defined.";
+            const cleanSop = stripHtml(rawSop);
+            currentDetailSopMarkdown = cleanSop;
+            
+            const preEl = document.getElementById("cat-detail-sop");
+            const renderedEl = document.getElementById("cat-detail-sop-rendered");
+            if (preEl) {
+                preEl.textContent = cleanSop;
+                preEl.style.display = "block";
+            }
+            if (renderedEl) {
+                if (rawSop.includes("<") && rawSop.includes(">")) {
+                    renderedEl.innerHTML = rawSop;
+                } else {
+                    renderedEl.innerHTML = `<div style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(rawSop)}</div>`;
+                }
+                renderedEl.style.display = "none";
+            }
+            const toggleBtn = document.getElementById("btn-toggle-sop-format");
+            if (toggleBtn) toggleBtn.textContent = "👁️ Formatted View";
 
             // Order button
             const orderBtn = document.getElementById("cat-detail-order-btn");
@@ -5342,11 +5385,35 @@ Trigger a CI/CD build run on Azure DevOps and monitor pipeline completion.
                 orderBtn.style.display = "flex";
             }
 
-            document.getElementById("modal-catalog-details").style.display = "flex";
+            const modal = document.getElementById("modal-catalog-details");
+            if (modal) {
+                modal.style.display = "flex";
+                modal.classList.add("active");
+            }
+        }
+
+        function toggleCatalogSopView() {
+            const preEl = document.getElementById("cat-detail-sop");
+            const renderedEl = document.getElementById("cat-detail-sop-rendered");
+            const toggleBtn = document.getElementById("btn-toggle-sop-format");
+            if (!preEl || !renderedEl) return;
+            if (preEl.style.display !== "none") {
+                preEl.style.display = "none";
+                renderedEl.style.display = "block";
+                if (toggleBtn) toggleBtn.textContent = "💻 Clean Text View";
+            } else {
+                preEl.style.display = "block";
+                renderedEl.style.display = "none";
+                if (toggleBtn) toggleBtn.textContent = "👁️ Formatted View";
+            }
         }
 
         function closeCatalogDetailsModal() {
-            document.getElementById("modal-catalog-details").style.display = "none";
+            const modal = document.getElementById("modal-catalog-details");
+            if (modal) {
+                modal.style.display = "none";
+                modal.classList.remove("active");
+            }
         }
 
         function copyCatalogPrompt() {
