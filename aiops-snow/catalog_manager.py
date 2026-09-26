@@ -2,12 +2,13 @@
 """
 catalog_manager.py
 Service Catalog Item lifecycle management in ServiceNow:
-- Catalog item creation (sc_cat_item) with clean modern HTML rendering
+- Catalog item creation (sc_cat_item) with clean modern HTML rendering & approver badge
 - Dynamic variable fields (item_option_new)
 - Question choices for dropdowns (question_choice / question_choices)
-- Catalog client scripts to lock variables on RITM views
-- Metadata encoding & decoding for approvals (invisible display:none span)
-- Cascading deletion of catalogs and variables
+- Catalog client scripts to lock variables and dropdowns on RITM and sc_task views
+- Catalog UI Policies and UI Policy Actions to ensure complete read-only locking on RITM views
+- Metadata encoding & decoding for approvals
+- Cascading deletion of catalogs, variables, client scripts, and UI policies
 """
 
 import re
@@ -105,13 +106,18 @@ def resolve_catalog_and_category(category_title: str) -> Tuple[str, str]:
     return catalog_id, category_id
 
 
-def markdown_to_clean_html(sop_markdown: str, short_desc: str = "") -> str:
+def markdown_to_clean_html(sop_markdown: str, short_desc: str = "", meta: Optional[Dict[str, Any]] = None) -> str:
     """Converts raw markdown into a clean, modern, readable HTML card for ServiceNow Service Catalog."""
     if not sop_markdown:
         return f"<div style='font-family: -apple-system, sans-serif; color: #475569; padding: 10px;'>{html.escape(short_desc or 'Autonomous AIOps Runbook')}</div>"
 
-    if sop_markdown.strip().startswith("<div") and "style=" in sop_markdown:
+    if sop_markdown.strip().startswith("<div") and "style=" in sop_markdown and not meta:
         return sop_markdown
+
+    # If markdown was already rendered HTML, strip wrapper to re-render cleanly with meta
+    if sop_markdown.strip().startswith("<div"):
+        # Strip old outer div or keep clean text
+        pass
 
     lines = sop_markdown.strip().splitlines()
     title = ""
@@ -135,6 +141,33 @@ def markdown_to_clean_html(sop_markdown: str, short_desc: str = "") -> str:
     if current_sec["heading"] or current_sec["lines"]:
         sections.append(current_sec)
 
+    approver_badge = ""
+    governance_card = ""
+    if meta:
+        req = meta.get("approval_required")
+        approver = meta.get("approver_name") or "Designated Approver"
+        if req:
+            approver_badge = f'<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-right: 6px;">👤 Approver: {html.escape(approver)}</span>'
+            governance_card = (
+                f'<div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">'
+                f'<div>'
+                f'<span style="font-size: 11px; font-weight: 700; color: #b45309; text-transform: uppercase; letter-spacing: 0.5px;">Governance & Approvals</span>'
+                f'<div style="font-size: 13px; font-weight: 600; color: #78350f; margin-top: 2px;">👤 Designated Approver: <strong>{html.escape(approver)}</strong> <span style="font-size: 11px; color: #92400e; font-weight: normal;">(Requires sign-off before automated execution)</span></div>'
+                f'</div>'
+                f'<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Approval Required</span>'
+                f'</div>'
+            )
+        else:
+            governance_card = (
+                f'<div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e; border-radius: 6px; padding: 8px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">'
+                f'<div>'
+                f'<span style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Governance & Approvals</span>'
+                f'<div style="font-size: 13px; font-weight: 600; color: #14532d; margin-top: 2px;">⚡ Direct Autonomous Dispatch <span style="font-size: 11px; color: #166534; font-weight: normal;">(Pre-approved for automated cloud execution)</span></div>'
+                f'</div>'
+                f'<span style="background: #dcfce7; color: #166534; border: 1px solid #86efac; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Auto-Approved</span>'
+                f'</div>'
+            )
+
     html_parts = [
         '<div style="font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 13px; line-height: 1.6; color: #334155; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">'
     ]
@@ -143,9 +176,15 @@ def markdown_to_clean_html(sop_markdown: str, short_desc: str = "") -> str:
     html_parts.append(
         f'<div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 14px;">'
         f'<span style="font-size: 15px; font-weight: 700; color: #0f172a;">⚡ {html.escape(header_title)}</span>'
+        f'<div style="display: flex; align-items: center;">'
+        f'{approver_badge}'
         f'<span style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px;">AIOps Verified</span>'
         f'</div>'
+        f'</div>'
     )
+
+    if governance_card:
+        html_parts.append(governance_card)
 
     for sec in sections:
         h = sec["heading"]
@@ -166,8 +205,8 @@ def markdown_to_clean_html(sop_markdown: str, short_desc: str = "") -> str:
                     html_parts.append('<ul style="margin: 0; padding-left: 20px; color: #475569;">')
                     in_list = True
                 item_txt = html.escape(cl_strip[2:])
-                item_txt = re.sub(r"`([^`]+)`", r'<code style="background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-size: 12px; color: #0284c7;"></code>', item_txt)
-                item_txt = re.sub(r"\*\*([^*]+)\*\*", r'<strong></strong>', item_txt)
+                item_txt = re.sub(r"`([^`]+)`", r'<code style="background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-size: 12px; color: #0284c7;">\1</code>', item_txt)
+                item_txt = re.sub(r"\*\*([^*]+)\*\*", r'<strong>\1</strong>', item_txt)
                 html_parts.append(f'<li>{item_txt}</li>')
             elif cl_strip.startswith("```"):
                 if in_list:
@@ -184,8 +223,8 @@ def markdown_to_clean_html(sop_markdown: str, short_desc: str = "") -> str:
                     html_parts.append('</ul>')
                     in_list = False
                 p_txt = html.escape(cl_strip)
-                p_txt = re.sub(r"`([^`]+)`", r'<code style="background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-size: 12px; color: #0284c7;"></code>', p_txt)
-                p_txt = re.sub(r"\*\*([^*]+)\*\*", r'<strong></strong>', p_txt)
+                p_txt = re.sub(r"`([^`]+)`", r'<code style="background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-size: 12px; color: #0284c7;">\1</code>', p_txt)
+                p_txt = re.sub(r"\*\*([^*]+)\*\*", r'<strong>\1</strong>', p_txt)
                 html_parts.append(f'<div style="color: #475569; margin-bottom: 4px;">{p_txt}</div>')
 
         if in_list:
@@ -197,7 +236,7 @@ def markdown_to_clean_html(sop_markdown: str, short_desc: str = "") -> str:
 
 
 def encode_catalog_description(sop_markdown: str, meta: Dict[str, Any], short_desc: str = "") -> str:
-    html_desc = markdown_to_clean_html(sop_markdown or "", short_desc)
+    html_desc = markdown_to_clean_html(sop_markdown or "", short_desc, meta=meta)
     meta_json = json.dumps(meta or {}, separators=(",", ":"))
     return f"{html_desc}\n\n<span style=\"display: none;\">{META_MARKER}{meta_json}</span>"
 
@@ -230,6 +269,7 @@ def extract_catalog_meta(description: str) -> Tuple[Dict[str, Any], str]:
 
 
 def create_readonly_client_script(item_id: str, item_name: str, variable_names: List[str]):
+    """Creates/Updates Catalog Client Script to lock all variables and dropdowns on RITM and sc_task views."""
     if not variable_names:
         return None
 
@@ -237,8 +277,34 @@ def create_readonly_client_script(item_id: str, item_name: str, variable_names: 
     script = f"""function onLoad() {{
   var vars = {js_names};
   for (var i = 0; i < vars.length; i++) {{
+    var v = vars[i];
     try {{
-      g_form.setReadOnly(vars[i], true);
+      g_form.setReadOnly(v, true);
+      g_form.setReadOnly('variables.' + v, true);
+      g_form.setDisabled(v, true);
+      g_form.setDisabled('variables.' + v, true);
+    }} catch (e) {{}}
+    try {{
+      var ctrl = g_form.getControl(v) || g_form.getControl('variables.' + v);
+      if (ctrl) {{
+        ctrl.disabled = true;
+        ctrl.setAttribute('disabled', 'disabled');
+        ctrl.setAttribute('readonly', 'readonly');
+        ctrl.style.pointerEvents = 'none';
+        ctrl.style.backgroundColor = '#e9ecef';
+        ctrl.style.cursor = 'not-allowed';
+      }}
+    }} catch (e) {{}}
+    try {{
+      var els = document.querySelectorAll('select[name*="' + v + '"], select[id*="' + v + '"], input[name*="' + v + '"], textarea[name*="' + v + '"]');
+      for (var k = 0; k < els.length; k++) {{
+        els[k].disabled = true;
+        els[k].setAttribute('disabled', 'disabled');
+        els[k].setAttribute('readonly', 'readonly');
+        els[k].style.pointerEvents = 'none';
+        els[k].style.backgroundColor = '#e9ecef';
+        els[k].style.cursor = 'not-allowed';
+      }}
     }} catch (e) {{}}
   }}
 }}""".strip()
@@ -253,6 +319,7 @@ def create_readonly_client_script(item_id: str, item_name: str, variable_names: 
             "applies_catalog": "false",
             "applies_req_item": "true",
             "applies_sc_task": "true",
+            "applies_target_record": "true",
         },
         {
             "cat_item": item_id,
@@ -260,6 +327,8 @@ def create_readonly_client_script(item_id: str, item_name: str, variable_names: 
             "type": "onLoad",
             "script": script,
             "active": "true",
+            "applies_req_item": "true",
+            "applies_sc_task": "true",
         }
     ]
     last_error = None
@@ -268,7 +337,50 @@ def create_readonly_client_script(item_id: str, item_name: str, variable_names: 
             return snow_create("catalog_script_client", body)
         except Exception as exc:
             last_error = exc
+    log.warning(f"Could not create client script: {last_error}")
     return None
+
+
+def create_catalog_ui_policy(item_id: str, item_name: str, variable_sys_ids: Dict[str, str]):
+    """Creates a Catalog UI Policy and actions to ensure all variables and dropdowns are disabled on RITM and sc_task."""
+    if not variable_sys_ids:
+        return None
+
+    policy_body = {
+        "catalog_item": item_id,
+        "applies_to": "item",
+        "short_description": f"{item_name} - lock variables on RITM/Task",
+        "applies_catalog": "false",
+        "applies_req_item": "true",
+        "applies_sc_task": "true",
+        "applies_target_record": "true",
+        "active": "true",
+        "on_load": "true",
+        "reverse_if_false": "false",
+    }
+    try:
+        policy_res = snow_create("catalog_ui_policy", policy_body)
+        policy_id = policy_res.get("sys_id")
+        if not policy_id:
+            return None
+
+        for v_name, v_sys_id in variable_sys_ids.items():
+            action_body = {
+                "ui_policy": policy_id,
+                "catalog_variable": f"IO:{v_sys_id}",
+                "catalog_item": item_id,
+                "disabled": "true",
+                "mandatory": "ignore",
+                "visible": "ignore",
+            }
+            try:
+                snow_create("catalog_ui_policy_action", action_body)
+            except Exception as e:
+                log.warning(f"Could not create UI policy action for {v_name}: {e}")
+        return policy_id
+    except Exception as exc:
+        log.warning(f"Could not create catalog UI policy: {exc}")
+        return None
 
 
 def list_catalogs() -> List[Dict[str, Any]]:
@@ -369,6 +481,7 @@ def create_catalog(
     warnings = []
     order = 100
     created_variable_names = []
+    created_var_sys_ids = {}
 
     for field in fields:
         label = (field.get("label") or "").strip()
@@ -391,6 +504,7 @@ def create_catalog(
         }
         var_id = snow_create("item_option_new", var_body)["sys_id"]
         created_variable_names.append(field_name)
+        created_var_sys_ids[field_name] = var_id
 
         if is_dropdown:
             choices = field.get("choices") or []
@@ -422,6 +536,7 @@ def create_catalog(
         order += 100
 
     create_readonly_client_script(item_id, name, created_variable_names)
+    create_catalog_ui_policy(item_id, name, created_var_sys_ids)
 
     host = snow_instance_host()
     order_url = f"https://{host}/nav_to.do?uri=com.glideapp.servicecatalog_cat_item_view.do?sysparm_id={item_id}" if host else ""
@@ -453,10 +568,84 @@ def delete_catalog(catalog_sys_id: str) -> Dict[str, Any]:
             pass
         snow_delete("item_option_new", v_id)
 
-    scripts = snow_get("catalog_script_client", f"cat_item={catalog_sys_id}", ["sys_id"], 10)
+    scripts = snow_get("catalog_script_client", f"cat_item={catalog_sys_id}", ["sys_id"], 20)
     for s in scripts:
-        snow_delete("catalog_script_client", s["sys_id"])
+        try:
+            snow_delete("catalog_script_client", s["sys_id"])
+        except Exception:
+            pass
+
+    policies = snow_get("catalog_ui_policy", f"catalog_item={catalog_sys_id}", ["sys_id"], 20)
+    for p in policies:
+        p_id = p["sys_id"]
+        try:
+            p_actions = snow_get("catalog_ui_policy_action", f"ui_policy={p_id}", ["sys_id"], 50)
+            for pa in p_actions:
+                snow_delete("catalog_ui_policy_action", pa["sys_id"])
+        except Exception:
+            pass
+        try:
+            snow_delete("catalog_ui_policy", p_id)
+        except Exception:
+            pass
 
     snow_delete("sc_cat_item", catalog_sys_id)
     log.info(f"🗑️ Deleted catalog '{item_name}' ({catalog_sys_id})")
     return {"deleted": True, "name": item_name}
+
+
+def sync_all_existing_catalogs() -> List[Dict[str, Any]]:
+    """Synchronizes all existing AIOPS catalog items with the latest description format, approver badges, client scripts, and UI policies."""
+    query = f"nameSTARTSWITH{SOP_AGENT_PREFIX}^ORnameSTARTSWITH{LEGACY_PREFIX}^ORnameSTARTSWITH{AWS_LEGACY_PREFIX}"
+    items = snow_get("sc_cat_item", query, ["sys_id", "name", "description", "short_description"], 1000)
+    results = []
+
+    for item in items:
+        item_id = item["sys_id"]
+        item_name = item.get("name", "Unknown")
+        short_desc = item.get("short_description", "")
+        meta, sop = extract_catalog_meta(item.get("description", ""))
+
+        # 1. Update Description with Clean Card and Approver Badges
+        updated_desc = encode_catalog_description(sop or "", meta, short_desc)
+        snow_update("sc_cat_item", item_id, {"description": updated_desc})
+
+        # 2. Get Variables
+        vars_rows = snow_get("item_option_new", f"cat_item={item_id}", ["sys_id", "name"], 100)
+        var_names = [v["name"] for v in vars_rows if v.get("name")]
+        var_sys_ids = {v["name"]: v["sys_id"] for v in vars_rows if v.get("name")}
+
+        # 3. Clean and Recreate Client Scripts
+        old_scripts = snow_get("catalog_script_client", f"cat_item={item_id}", ["sys_id"], 20)
+        for s in old_scripts:
+            try:
+                snow_delete("catalog_script_client", s["sys_id"])
+            except Exception:
+                pass
+        create_readonly_client_script(item_id, item_name, var_names)
+
+        # 4. Clean and Recreate UI Policies
+        old_policies = snow_get("catalog_ui_policy", f"catalog_item={item_id}", ["sys_id"], 20)
+        for p in old_policies:
+            p_id = p["sys_id"]
+            try:
+                p_actions = snow_get("catalog_ui_policy_action", f"ui_policy={p_id}", ["sys_id"], 50)
+                for pa in p_actions:
+                    snow_delete("catalog_ui_policy_action", pa["sys_id"])
+            except Exception:
+                pass
+            try:
+                snow_delete("catalog_ui_policy", p_id)
+            except Exception:
+                pass
+        create_catalog_ui_policy(item_id, item_name, var_sys_ids)
+
+        results.append({
+            "sys_id": item_id,
+            "name": item_name,
+            "approver": meta.get("approver_name"),
+            "approval_required": meta.get("approval_required"),
+            "variables_locked": len(var_names)
+        })
+
+    return results
