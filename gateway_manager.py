@@ -84,23 +84,19 @@ def get_allowed_tools_for_server(target_name: str) -> Optional[List[str]]:
     return None
 
 
-def load_tool_module(server_name: str):
-    """Dynamically load an MCP server module from mcp_servers/<server_name>/server.py."""
-    server_path = None
-    try:
-        from app import ensure_server_script, load_server_registry
-        registry = load_server_registry()
-        s_info = registry.get("servers", {}).get(server_name)
-        if s_info:
-            server_path = ensure_server_script(server_name, s_info.get("config", {}), s_info.get("tools", []))
-    except Exception as ex_gen:
-        logger.warning(f"Could not auto-generate fresh server script for {server_name}: {ex_gen}")
+_MODULE_CACHE: Dict[str, Any] = {}
+_MODULE_MTIME_CACHE: Dict[str, float] = {}
+_MODULE_LOAD_LOCK = threading.Lock()
 
-    if not server_path or not os.path.exists(server_path):
+
+def load_tool_module(server_name: str):
+    """Dynamically and safely load an MCP server module from mcp_servers/<server_name>/server.py with caching."""
+    with _MODULE_LOAD_LOCK:
+        server_path = None
         candidates = [
             os.path.join(SERVERS_DIR, server_name, "server.py"),
-            os.path.join(BASE_DIR, "mcp_servers", server_name, "server.py"),
             os.path.join(BASE_DIR, "persistent_data", "mcp_servers", server_name, "server.py"),
+            os.path.join(BASE_DIR, "mcp_servers", server_name, "server.py"),
             os.path.join("/home/data/mcp_storage/mcp_servers", server_name, "server.py"),
             os.path.join("/home/site/wwwroot/mcp_servers", server_name, "server.py"),
             os.path.join("/data/mcp_storage/mcp_servers", server_name, "server.py")
@@ -110,23 +106,38 @@ def load_tool_module(server_name: str):
                 server_path = c
                 break
 
-    if not server_path or not os.path.exists(server_path):
-        return None, f"Script not found for server '{server_name}'"
+        if not server_path or not os.path.exists(server_path):
+            try:
+                from app import ensure_server_script, load_server_registry
+                registry = load_server_registry()
+                s_info = registry.get("servers", {}).get(server_name)
+                if s_info:
+                    server_path = ensure_server_script(server_name, s_info.get("config", {}), s_info.get("tools", []))
+            except Exception as ex_gen:
+                logger.warning(f"Could not auto-generate fresh server script for {server_name}: {ex_gen}")
 
-    try:
-        module_name = f"mcp_server_{server_name}"
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-        spec = importlib.util.spec_from_file_location(module_name, server_path)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module
-            spec.loader.exec_module(module)
-            return module, ""
-    except Exception as e:
-        logger.error(f"Error loading server module for {server_name}: {e}")
-        return None, str(e)
-    return None, "Unknown module load failure"
+        if not server_path or not os.path.exists(server_path):
+            return None, f"Script not found for server '{server_name}'"
+
+        try:
+            mtime = os.path.getmtime(server_path)
+            # Return cached module if file hasn't changed
+            if server_name in _MODULE_CACHE and _MODULE_MTIME_CACHE.get(server_name) == mtime:
+                return _MODULE_CACHE[server_name], ""
+
+            module_name = f"mcp_server_{server_name}"
+            spec = importlib.util.spec_from_file_location(module_name, server_path)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                _MODULE_CACHE[server_name] = module
+                _MODULE_MTIME_CACHE[server_name] = mtime
+                return module, ""
+        except Exception as e:
+            logger.error(f"Error loading server module for {server_name}: {e}")
+            return None, str(e)
+        return None, "Unknown module load failure"
 
 
 def execute_tool_call(target_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

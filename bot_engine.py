@@ -370,6 +370,17 @@ class BotDaemonManager:
         self._stop_events.pop(bot_id, None)
         return True
 
+    def start_active_daemons(self):
+        """Scans all registered bots and starts background daemon threads for bots with status 'active'."""
+        try:
+            bots = bot_registry.list_bots()
+            for bot_id, bot_data in bots.items():
+                if bot_data.get("status") == "active" and not self.is_running(bot_id):
+                    logger.info(f"🔄 Auto-starting background watchdog daemon for active bot '{bot_id}'...")
+                    self.start(bot_id)
+        except Exception as e:
+            logger.warning(f"Notice auto-starting active bot daemons: {e}")
+
 
 daemon_manager = BotDaemonManager()
 bot_registry = BotRegistry()
@@ -1276,11 +1287,15 @@ def _execute_deterministic_agent_fallback(
             # Step 3: Query ServiceNow for deduplication
             existing_sys_id = None
             if any("servicenow" in s for s in tools_req):
-                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"query": f"active=true^short_descriptionLIKESpring Boot App Error"}, "ServiceNow Incident Deduplication Check")
+                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "active=true^short_descriptionLIKESpring Boot App Error"}, "ServiceNow Incident Deduplication Check")
                 active_incs = sn_query_data.get("result") or [] if isinstance(sn_query_data, dict) else []
-                if active_incs and isinstance(active_incs, list) and len(active_incs) > 0:
-                    existing_sys_id = active_incs[0].get("sys_id") or active_incs[0].get("number")
-                    logger.info(f"🛡️ Deduplication: Active ticket {active_incs[0].get('number')} found.")
+                matching_incs = [
+                    inc for inc in active_incs 
+                    if isinstance(inc, dict) and "Spring Boot App Error" in inc.get("short_description", "") and str(inc.get("active", "")).lower() == "true"
+                ]
+                if matching_incs:
+                    existing_sys_id = matching_incs[0].get("sys_id") or matching_incs[0].get("number")
+                    logger.info(f"🛡️ Deduplication: Active ticket {matching_incs[0].get('number')} found.")
 
             # Step 4: Create Incident if not already existing
             incident_id = existing_sys_id
@@ -1311,10 +1326,10 @@ def _execute_deterministic_agent_fallback(
                 # Inspect latest pipeline build
                 _, b_data = _add_step("List Azure DevOps Builds", "azure_devops", "list_builds", {"project": ado_project, "top": 3}, f"Azure DevOps Pipeline Build Trace ({ado_project})")
                 
-                # Inspect codebase schema/controller
-                _, file_data = _add_step("Inspect Codebase Schema", "azure_devops", "get_file_content", {"project": ado_project, "repository": ado_repo, "path": "src/main/resources/schema.sql"}, f"Azure DevOps Code Repository Inspection ({ado_repo})")
+                # Inspect codebase controller
+                _, file_data = _add_step("Inspect Codebase Controller", "azure_devops", "get_file_content", {"project": ado_project, "repository": ado_repo, "path": "src/main/java/com/devops/sample/controller/AppController.java", "includeContent": True}, f"Azure DevOps Code Repository Inspection ({ado_repo})")
                 if file_data and isinstance(file_data, dict):
-                    ado_code_context = f"Schema definition: {file_data.get('content', '')[:500]}"
+                    ado_code_context = f"AppController source: {str(file_data.get('content', ''))[:800]}"
 
             # Step 7: AI RCA Synthesis
             s_num = len(steps_log) + 1
@@ -1349,6 +1364,8 @@ def _execute_deterministic_agent_fallback(
 
                 _add_step("Resolve Incident", "servicenow", "resolve_incident", {
                     "incident_id": incident_id,
+                    "state": "6",
+                    "close_code": "Solution provided",
                     "close_notes": f"Resolved by Autonomous SRE AI. Root Cause: {rca_res.get('root_cause', 'Schema column constraint mismatch')}."
                 }, "ServiceNow Incident Auto-Resolution")
 

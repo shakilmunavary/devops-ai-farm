@@ -462,6 +462,16 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
             if state_val.lower() in state_map:
                 args["state"] = state_map[state_val.lower()]
 
+        # Map generic 'query' or 'filter' to ServiceNow 'sysparm_query'
+        if "query" in args and "sysparm_query" not in args:
+            args["sysparm_query"] = args.pop("query")
+        if "filter" in args and "sysparm_query" not in args:
+            args["sysparm_query"] = args.pop("filter")
+        if "limit" in args and "sysparm_limit" not in args:
+            args["sysparm_limit"] = args.pop("limit")
+        if "top" in args and "sysparm_limit" not in args:
+            args["sysparm_limit"] = args.pop("top")
+
         # Check for incident identifier
         inc_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id")
         if inc_val and (str(inc_val).upper().startswith("INC") or len(str(inc_val)) != 32):
@@ -1785,7 +1795,11 @@ def toggle_bot_status(bot_id):
     new_status = bot_registry.toggle_status(bot_id)
     if new_status is None:
         return jsonify({"error": "Bot not found"}), 404
-    return jsonify({"success": True, "status": new_status})
+    if new_status == "active":
+        daemon_manager.start(bot_id)
+    else:
+        daemon_manager.stop(bot_id)
+    return jsonify({"success": True, "status": new_status, "is_running": daemon_manager.is_running(bot_id)})
 
 
 @app.route("/api/bots/<bot_id>", methods=["DELETE"])
@@ -2101,13 +2115,31 @@ def clear_aiops_engine_logs():
         return jsonify({"error": str(e)}), 500
 
 
+def init_app_background_services():
+    """Initializes and auto-starts background gateway and autonomous bot daemons."""
+    try:
+        gateway_mgr.start_gateway()
+    except Exception as e:
+        logger.warning(f"Notice starting gateway on boot: {e}")
+    try:
+        import threading
+        timer = threading.Timer(2.0, daemon_manager.start_active_daemons)
+        timer.daemon = True
+        timer.start()
+    except Exception as e:
+        logger.warning(f"Notice scheduling active bot daemons: {e}")
+
+
+# Initialize background services (for Gunicorn / WSGI / App Service)
+init_app_background_services()
+
+
 def main():
     host = os.environ.get("FLASK_HOST", "0.0.0.0")
     port = int(os.environ.get("FLASK_PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "False").lower() in ["true", "1"]
 
     logger.info(f"Starting AI MCP Server Kit Web App on http://{host}:{port}")
-    gateway_mgr.start_gateway()
     app.run(host=host, port=port, debug=debug, use_reloader=False)
 
 
