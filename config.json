@@ -1010,7 +1010,7 @@
           "description": "Update existing incident fields (state, urgency, impact, priority, category)",
           "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "update_incident(sys_id='INC1234567', state='in_progress', urgency='2', impact='2', priority='2', category='software')",
-          "method": "PUT",
+          "method": "PATCH",
           "name": "update_incident",
           "params": {
             "category": "optional - New category",
@@ -1034,7 +1034,7 @@
           "description": "Resolve an incident with resolution code and resolution notes",
           "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "resolve_incident(sys_id='INC1234567', resolution_code='successful', resolution_notes='Server was rebooted and is now operational')",
-          "method": "PUT",
+          "method": "PATCH",
           "name": "resolve_incident",
           "params": {
             "resolution_code": "required - Resolution code",
@@ -1052,7 +1052,7 @@
           "description": "Permanently close an incident with closing notes",
           "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "close_incident(sys_id='INC1234567', close_notes='Incident resolved and closed')",
-          "method": "PUT",
+          "method": "PATCH",
           "name": "close_incident",
           "params": {
             "close_notes": "required - Closing notes",
@@ -1424,7 +1424,7 @@
           "description": "Update existing incident fields (state, urgency, impact, priority, category)",
           "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "update_incident(sys_id='INC1234567', state='in_progress', urgency='2', impact='2', priority='2', category='software')",
-          "method": "PUT",
+          "method": "PATCH",
           "name": "update_incident",
           "params": {
             "category": "optional - New category",
@@ -1448,7 +1448,7 @@
           "description": "Resolve an incident with resolution code and resolution notes",
           "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "resolve_incident(sys_id='INC1234567', resolution_code='successful', resolution_notes='Server was rebooted and is now operational')",
-          "method": "PUT",
+          "method": "PATCH",
           "name": "resolve_incident",
           "params": {
             "resolution_code": "required - Resolution code",
@@ -1466,7 +1466,7 @@
           "description": "Permanently close an incident with closing notes",
           "endpoint": "/api/now/table/incident/{sys_id}",
           "example_call": "close_incident(sys_id='INC1234567', close_notes='Incident resolved and closed')",
-          "method": "PUT",
+          "method": "PATCH",
           "name": "close_incident",
           "params": {
             "close_notes": "required - Closing notes",

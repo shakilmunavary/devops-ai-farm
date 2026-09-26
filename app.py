@@ -553,6 +553,11 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
 
     # Azure DevOps: Ensure api-version and project scoping
     if is_ado:
+        if not proj_val or "your-" in str(proj_val).lower():
+            proj_val = os.environ.get("AZURE_DEVOPS_PROJECT", "AI-POC")
+        if not repo_val or "your-" in str(repo_val).lower():
+            repo_val = os.environ.get("AZURE_DEVOPS_REPO", "springboot-app")
+
         if "api-version=" not in target_endpoint and "api-version" not in args:
             if "pipelines" in target_endpoint:
                 args["api-version"] = "7.1-preview.1"
@@ -563,7 +568,7 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
 
         if needs_project_scoping:
             # Smart discovery: If proj_val is missing, resolve dynamically via /_apis/projects or /_apis/git/repositories
-            if not proj_val:
+            if not proj_val or "your-" in str(proj_val).lower():
                 try:
                     with httpx.Client(verify=False, headers=headers, timeout=6.0, follow_redirects=True) as p_client:
                         p_res = p_client.get(f"{{base}}/_apis/projects", params={{"api-version": "7.1", "$top": 10}})
@@ -720,7 +725,10 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
                     clean_args["api-version"] = api_ver
                 res = client.delete(url, params=clean_args)
             elif "{method}" == "PUT":
-                res = client.put(url, params=query_params, json=clean_args if clean_args else None)
+                if any(w in srv_lower for w in ["servicenow", "snow"]):
+                    res = client.patch(url, params=query_params, json=clean_args if clean_args else None)
+                else:
+                    res = client.put(url, params=query_params, json=clean_args if clean_args else None)
             elif "{method}" == "PATCH":
                 res = client.patch(url, params=query_params, json=clean_args if clean_args else None)
             else:

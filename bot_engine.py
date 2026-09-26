@@ -653,8 +653,31 @@ def get_nested_value(data: Any, path: str) -> Any:
 
 
 def resolve_variable_path(var_path: str, execution_state: Dict[str, Any]) -> Any:
-    """Resolves a variable path like step_1.output.builds[0].id against execution_state."""
-    parts = var_path.split('.', 1)
+    """Resolves a variable path like step_1.output.builds[0].id or incident_sys_id against execution_state."""
+    clean_path = var_path.strip("{} \t\r\n")
+
+    # Smart common aliases
+    if clean_path in ["incident_sys_id", "sys_id", "incident.sys_id"]:
+        inc = execution_state.get("incident")
+        if isinstance(inc, dict):
+            return inc.get("sys_id") or inc.get("id")
+        return execution_state.get("incident_sys_id")
+    if clean_path in ["incident_number", "number", "incident.number"]:
+        inc = execution_state.get("incident")
+        if isinstance(inc, dict):
+            return inc.get("number")
+        return execution_state.get("incident_number")
+    if clean_path in ["logs", "error_logs", "error_log"]:
+        return execution_state.get("error_log") or execution_state.get("step_1", {}).get("raw", "")
+    if clean_path in ["rca_findings", "rca_summary", "rca"]:
+        rca = execution_state.get("rca")
+        if isinstance(rca, dict):
+            return rca.get("root_cause") or rca.get("formatted_rca_markdown") or rca.get("incident_title")
+        return execution_state.get("rca_findings")
+    if clean_path in ["pipeline_code", "source_code"]:
+        return execution_state.get("step_4", {}).get("raw") or execution_state.get("step_3", {}).get("raw") or ""
+
+    parts = clean_path.split('.', 1)
     root_key = parts[0]
     rest = parts[1] if len(parts) > 1 else ""
 
@@ -683,25 +706,27 @@ def resolve_variable_path(var_path: str, execution_state: Dict[str, Any]) -> Any
 
 
 def resolve_template_variables(val: Any, execution_state: Dict[str, Any]) -> Any:
-    """Recursively resolves template variables in strings, dictionaries, or lists."""
+    """Recursively resolves template variables in strings, dictionaries, or lists (handles both {{var}} and {var})."""
     if isinstance(val, dict):
         return {k: resolve_template_variables(v, execution_state) for k, v in val.items()}
     elif isinstance(val, list):
         return [resolve_template_variables(item, execution_state) for item in val]
     elif isinstance(val, str):
-        single_match = re.fullmatch(r'\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\}\}', val.strip())
+        # 1. Exact match for {{var}} or {var}
+        single_match = re.fullmatch(r'\{{1,2}\s*([a-zA-Z0-9_.\[\]]+)\s*\}{1,2}', val.strip())
         if single_match:
             var_path = single_match.group(1)
             resolved = resolve_variable_path(var_path, execution_state)
             if resolved is not None:
                 return resolved
 
+        # 2. Inline substring replacements for {{var}} or {var}
         def _replace_match(m):
             v_path = m.group(1)
             res = resolve_variable_path(v_path, execution_state)
-            return str(res) if res is not None else ""
+            return str(res) if res is not None else m.group(0)
 
-        return re.sub(r'\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\}\}', _replace_match, val)
+        return re.sub(r'\{{1,2}\s*([a-zA-Z0-9_.\[\]]+)\s*\}{1,2}', _replace_match, val)
 
     return val
 
@@ -1985,8 +2010,31 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
             }
             steps_log.append(step_record)
 
-            # 4. Handle Condition Check Steps
-            if step_server in ["local", "system"] or step_tool in ["check_condition", "check_health"]:
+            # 4. Handle Built-in / Local AI RCA Tools
+            if step_tool in ["generate_ai_rca", "ai_rca", "perform_rca", "rca"] or (step_server in ["built_in", "ai", "mistral"] and "rca" in step_tool):
+                err_text = step_args.get("error_logs") or step_args.get("error_log") or execution_state.get("error_log") or f"Build failure in {bot_name}"
+                src_code = step_args.get("pipeline_code") or step_args.get("source_code") or execution_state.get("step_4", {}).get("raw", "")
+                rca_data = generate_ai_rca(str(err_text), bot_name, app_context=str(src_code))
+                execution_state[f"step_{step_num}"] = {"output": {"rca": rca_data.get("formatted_rca_markdown"), "title": rca_data.get("incident_title"), "data": rca_data}}
+                execution_state["rca"] = rca_data
+                execution_state["rca_findings"] = rca_data.get("root_cause") or rca_data.get("incident_title") or "Root Cause Analysis generated."
+
+                step_record["status"] = "success"
+                step_record["details"] = f"AI RCA Synthesized: {rca_data.get('incident_title', 'Root Cause Identified')}"
+                step_record["mcp_output"] = rca_data.get("formatted_rca_markdown", "")
+
+                step_outputs.append({
+                    "step": step_num,
+                    "action": step_action,
+                    "server": "built_in",
+                    "tool": "generate_ai_rca",
+                    "success": True,
+                    "output": rca_data.get("formatted_rca_markdown", "")
+                })
+                continue
+
+            # 5. Handle Condition Check Steps
+            if step_tool in ["check_condition", "check_health"] or (step_server in ["local", "system"] and "rca" not in step_tool):
                 has_err = execution_state.get("has_failure", False)
                 if has_err:
                     step_record["status"] = "alert"
@@ -2005,28 +2053,6 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     "tool": step_tool,
                     "success": True,
                     "output": step_record["details"]
-                })
-                continue
-
-            # 5. Handle Built-in AI RCA Tools
-            if step_server in ["built_in", "ai", "mistral"] or step_tool in ["generate_ai_rca", "ai_rca", "perform_rca"]:
-                err_text = step_args.get("error_log") or execution_state.get("error_log") or f"Issue in {bot_name}"
-                src_code = step_args.get("source_code") or ""
-                rca_data = generate_ai_rca(str(err_text), bot_name, app_context=str(src_code))
-                execution_state[f"step_{step_num}"] = {"output": {"rca": rca_data.get("formatted_rca_markdown"), "title": rca_data.get("incident_title"), "data": rca_data}}
-                execution_state["rca"] = rca_data
-
-                step_record["status"] = "success"
-                step_record["details"] = f"AI RCA Synthesized: {rca_data.get('incident_title', 'Root Cause Identified')}"
-                step_record["mcp_output"] = rca_data.get("formatted_rca_markdown", "")
-
-                step_outputs.append({
-                    "step": step_num,
-                    "action": step_action,
-                    "server": "built_in",
-                    "tool": "generate_ai_rca",
-                    "success": True,
-                    "output": rca_data.get("formatted_rca_markdown", "")
                 })
                 continue
 
