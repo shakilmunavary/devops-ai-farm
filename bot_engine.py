@@ -1231,14 +1231,14 @@ def run_bot_workflow(bot_id: str, trigger_reason: str = "Manual Trigger", _is_in
                     steps_log.append(step_record)
                     continue
 
-            # 2. Pipeline Health Gate: If pipeline is healthy, skip error/RCA/incident creation steps
-            is_error_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["error", "rca", "incident", "create_incident", "add_work_note", "get_build_logs"])
+            # 2. Pipeline Health Gate: If pipeline is healthy, skip error/RCA/file inspection/incident creation steps
+            is_error_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["error", "rca", "incident", "create_incident", "add_work_note", "get_build_logs", "get_file_content", "inspect"])
             if execution_state.get("pipeline_healthy") and is_error_step and not execution_state.get("has_failure") and step_tool != "query_incidents":
                 step_record = {
                     "step": step_num,
                     "name": f"{step_action} ({step_server}.{step_tool})" if step_server and step_tool else step_action,
                     "status": "skipped",
-                    "details": "Skipped: Pipeline build is healthy & operational (succeeded). No RCA or incident creation required."
+                    "details": "Skipped: Pipeline build is healthy & operational (succeeded). No error logs, code inspection, RCA, or incident creation required."
                 }
                 steps_log.append(step_record)
                 continue
