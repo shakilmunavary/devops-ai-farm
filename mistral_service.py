@@ -888,6 +888,42 @@ def format_tool_output_human_readable(server_id: str, tool_name: str, raw_output
                 f"| :--- | :--- | :--- | :--- |\n"
                 f"{table_md}"
             )
+        elif "pipeline" in t_lower:
+            rows = []
+            for p in items:
+                p_id = p.get("id", "N/A")
+                p_name = p.get("name", "N/A")
+                p_folder = p.get("folder", "\\")
+                p_rev = p.get("revision", 1)
+                p_url = p.get("_links", {}).get("web", {}).get("href", "")
+                link_str = f"[{p_name}]({p_url})" if p_url else f"**{p_name}**"
+                rows.append(f"| `{p_id}` | {link_str} | `{p_folder}` | v{p_rev} |")
+
+            table_md = "\n".join(rows)
+            return (
+                f"Found **{len(items)} Pipeline(s)** in Azure DevOps:\n\n"
+                f"| ID | Pipeline Name | Folder | Revision |\n"
+                f"| :--- | :--- | :--- | :--- |\n"
+                f"{table_md}"
+            )
+        elif "build" in t_lower:
+            rows = []
+            for b in items[:20]:
+                b_num = b.get("buildNumber", "N/A")
+                b_status = format_state_badge(b.get("status", "completed"))
+                b_res = format_state_badge(b.get("result", "succeeded"))
+                b_pipe = b.get("definition", {}).get("name", "Pipeline")
+                b_url = b.get("_links", {}).get("web", {}).get("href", "")
+                link_str = f"[{b_num}]({b_url})" if b_url else f"**{b_num}**"
+                rows.append(f"| {link_str} | {b_pipe} | {b_status} | {b_res} |")
+
+            table_md = "\n".join(rows)
+            return (
+                f"Found **{len(items)} Build Run(s)** in Azure DevOps:\n\n"
+                f"| Build # | Pipeline | Status | Result |\n"
+                f"| :--- | :--- | :--- | :--- |\n"
+                f"{table_md}"
+            )
         elif "repo" in t_lower:
             rows = []
             for r in items:
@@ -1033,7 +1069,14 @@ def chat_with_mcp_agent(
                 target_server = "azure_devops"
                 ado_tools = [t.get("name") for t in (servers.get("azure_devops", {}).get("tools") or servers.get("azure_devops", {}).get("all_tools") or [])]
                 if not target_tool or target_tool not in ado_tools:
-                    target_tool = "list_projects" if "list_projects" in ado_tools else (ado_tools[0] if ado_tools else "list_projects")
+                    if any(w in msg_low for w in ["pipeline", "pipelines"]):
+                        target_tool = "list_pipelines" if "list_pipelines" in ado_tools else ("list_builds" if "list_builds" in ado_tools else "list_projects")
+                    elif any(w in msg_low for w in ["build", "builds", "run"]):
+                        target_tool = "list_builds" if "list_builds" in ado_tools else "list_projects"
+                    elif any(w in msg_low for w in ["repo", "repository", "repositories"]):
+                        target_tool = "list_repositories" if "list_repositories" in ado_tools else "list_projects"
+                    else:
+                        target_tool = "list_projects" if "list_projects" in ado_tools else (ado_tools[0] if ado_tools else "list_projects")
             elif is_app_query and target_server not in ["azure_app_service", "app_service"] and ("azure_app_service" in servers or "app_service" in servers):
                 target_server = "azure_app_service" if "azure_app_service" in servers else "app_service"
             elif is_vm_query and target_server not in ["azure_virtual_machines", "azure_vms"] and ("azure_virtual_machines" in servers or "azure_vms" in servers):
@@ -1195,13 +1238,15 @@ CRITICAL RULES:
                 target_tool = "list_repositories" if "list_repositories" in g_tools else (g_tools[0] if g_tools else "list_repositories")
 
         # 3. Azure DevOps Project / Repo / Build checking (Requires explicit ADO keywords)
-        if not target_server and "azure_devops" in servers and any(w in combined_lower for w in ["azure devops", "azure_devops", "devops", "ado", "vsts", "azure pipeline", "pipelines", "builds", "ado project", "ado repo"]):
+        if not target_server and "azure_devops" in servers and any(w in combined_lower for w in ["azure devops", "azure_devops", "devops", "ado", "vsts", "azure pipeline", "pipelines", "pipeline", "builds", "ado project", "ado repo"]):
             target_server = "azure_devops"
             ado_tools = [t.get("name") for t in servers["azure_devops"].get("tools", [])]
-            if "repo" in msg_lower or "repository" in msg_lower:
-                target_tool = "list_repositories" if "list_repositories" in ado_tools else "list_projects"
-            elif "pipeline" in msg_lower or "build" in msg_lower:
+            if "pipeline" in msg_lower:
+                target_tool = "list_pipelines" if "list_pipelines" in ado_tools else ("list_builds" if "list_builds" in ado_tools else "list_projects")
+            elif "build" in msg_lower or "runs" in msg_lower:
                 target_tool = "list_builds" if "list_builds" in ado_tools else "list_projects"
+            elif "repo" in msg_lower or "repository" in msg_lower:
+                target_tool = "list_repositories" if "list_repositories" in ado_tools else "list_projects"
             else:
                 target_tool = "list_projects" if "list_projects" in ado_tools else (ado_tools[0] if ado_tools else "list_projects")
 

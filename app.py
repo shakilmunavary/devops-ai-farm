@@ -505,10 +505,31 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
     # Azure DevOps: Ensure api-version and project scoping
     if is_ado:
         if "api-version=" not in target_endpoint and "api-version" not in args:
-            args["api-version"] = "7.1"
-        if proj_val and "/_apis/" in target_endpoint and f"/{{proj_val}}/" not in target_endpoint:
-            if any(sub in target_endpoint for sub in ["/_apis/git", "/_apis/pipelines", "/_apis/build", "/_apis/wit", "/_apis/work", "/_apis/release"]):
-                target_endpoint = target_endpoint.replace("/_apis/", f"/{{proj_val}}/_apis/")
+            if "pipelines" in target_endpoint:
+                args["api-version"] = "7.1-preview.1"
+            else:
+                args["api-version"] = "7.1"
+
+        needs_project_scoping = any(sub in target_endpoint for sub in ["/_apis/git", "/_apis/pipelines", "/_apis/build", "/_apis/wit", "/_apis/work", "/_apis/release", "/_apis/distributedtask", "/_apis/serviceendpoint"]) or re.search(r'\\{{(?:project(?:_?(?:name|id|key))?|projectId)\\}}', target_endpoint)
+
+        if needs_project_scoping:
+            # Smart discovery: If proj_val is missing, resolve dynamically via /_apis/projects
+            if not proj_val:
+                try:
+                    with httpx.Client(verify=False, auth=auth, headers=headers, timeout=6.0) as p_client:
+                        p_res = p_client.get(f"{{base}}/_apis/projects", params={{"api-version": "7.1", "$top": 10}})
+                        if p_res.status_code == 200:
+                            p_data = p_res.json()
+                            p_list = p_data.get("value", []) if isinstance(p_data, dict) else []
+                            if p_list and isinstance(p_list, list) and len(p_list) > 0:
+                                proj_val = p_list[0].get("name", "")
+                except Exception:
+                    pass
+
+            if proj_val:
+                target_endpoint = re.sub(r'\\{{(?:project(?:_?(?:name|id|key))?|projectId)\\}}', lambda m: str(proj_val), target_endpoint, flags=re.IGNORECASE)
+                if "/_apis/" in target_endpoint and f"/{{proj_val}}/" not in target_endpoint and not target_endpoint.startswith("/_apis/projects"):
+                    target_endpoint = target_endpoint.replace("/_apis/", f"/{{proj_val}}/_apis/")
 
     # GitHub smart endpoint routing
     if "github" in srv_lower:
