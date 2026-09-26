@@ -544,6 +544,22 @@ def format_priority_badge(p: Any) -> str:
     return str(p)
 
 
+def clean_llm_synth_response(text: str) -> str:
+    """Strips meta-talk, conversational filler, and redundant markdown dividers from LLM tool synthesis."""
+    if not text:
+        return ""
+    cleaned = text.strip()
+    patterns = [
+        r"^(?:Here(?:\'s| is| are)|Below is|Sure!? Here is|Certainly,?(?: here is)?)[^\n]*:\s*",
+        r"^---\s*",
+    ]
+    for _ in range(4):
+        for pat in patterns:
+            cleaned = re.sub(pat, "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\s*---\s*$", "", cleaned).strip()
+    return cleaned
+
+
 def format_tool_output_human_readable(server_id: str, tool_name: str, raw_output: str, user_query: str = "") -> str:
     """
     Transforms any raw tool output into rich, conversational Markdown.
@@ -1093,8 +1109,7 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                         timeout=8.0
                     )
                     synth_reply = synth_res.get("content", "").strip()
-                    # Strip any meta preamble from LLM (e.g., "Here is a clean response:")
-                    synth_reply = re.sub(r'^(?:Here(?:\'s| is) (?:a )?(?:clean|concise|formatted)?\s*(?:and\s+concise\s+)?response.*?:?\s*|\s*---\s*)+', '', synth_reply, flags=re.IGNORECASE).strip()
+                    synth_reply = clean_llm_synth_response(synth_reply)
                     if not synth_reply or synth_reply.startswith("```json") or synth_reply.startswith("{") or "```json\n{" in synth_reply:
                         synth_reply = format_tool_output_human_readable(target_server, target_tool, result_content, user_message)
                 except Exception:

@@ -86,32 +86,32 @@ def get_allowed_tools_for_server(target_name: str) -> Optional[List[str]]:
 
 def load_tool_module(server_name: str):
     """Dynamically load an MCP server module from mcp_servers/<server_name>/server.py."""
-    candidates = [
-        os.path.join(SERVERS_DIR, server_name, "server.py"),
-        os.path.join(BASE_DIR, "mcp_servers", server_name, "server.py"),
-        os.path.join(BASE_DIR, "persistent_data", "mcp_servers", server_name, "server.py"),
-        os.path.join("/home/data/mcp_storage/mcp_servers", server_name, "server.py"),
-        os.path.join("/home/site/wwwroot/mcp_servers", server_name, "server.py"),
-        os.path.join("/data/mcp_storage/mcp_servers", server_name, "server.py")
-    ]
     server_path = None
-    for c in candidates:
-        if os.path.exists(c):
-            server_path = c
-            break
+    try:
+        from app import ensure_server_script, load_server_registry
+        registry = load_server_registry()
+        s_info = registry.get("servers", {}).get(server_name)
+        if s_info:
+            server_path = ensure_server_script(server_name, s_info.get("config", {}), s_info.get("tools", []))
+    except Exception as ex_gen:
+        logger.warning(f"Could not auto-generate fresh server script for {server_name}: {ex_gen}")
 
     if not server_path or not os.path.exists(server_path):
-        try:
-            from app import ensure_server_script, load_server_registry
-            registry = load_server_registry()
-            s_info = registry.get("servers", {}).get(server_name)
-            if s_info:
-                server_path = ensure_server_script(server_name, s_info.get("config", {}), s_info.get("tools", []))
-        except Exception as ex_gen:
-            logger.warning(f"Could not auto-generate server script for {server_name}: {ex_gen}")
+        candidates = [
+            os.path.join(SERVERS_DIR, server_name, "server.py"),
+            os.path.join(BASE_DIR, "mcp_servers", server_name, "server.py"),
+            os.path.join(BASE_DIR, "persistent_data", "mcp_servers", server_name, "server.py"),
+            os.path.join("/home/data/mcp_storage/mcp_servers", server_name, "server.py"),
+            os.path.join("/home/site/wwwroot/mcp_servers", server_name, "server.py"),
+            os.path.join("/data/mcp_storage/mcp_servers", server_name, "server.py")
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                server_path = c
+                break
 
     if not server_path or not os.path.exists(server_path):
-        return None, f"Script not found in candidate paths: {candidates}"
+        return None, f"Script not found for server '{server_name}'"
 
     try:
         module_name = f"mcp_server_{server_name}"
