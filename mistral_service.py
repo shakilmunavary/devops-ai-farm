@@ -828,24 +828,22 @@ def format_tool_output_human_readable(server_id: str, tool_name: str, raw_output
                 f"| :--- | :--- | :--- | :--- |\n"
                 f"{table_md}"
             )
-        elif any(k in t_lower for k in ["issue", "pull", "pr"]):
+        elif any(k in t_lower for k in ["workflow"]):
+            workflows = data.get("workflows", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            if not workflows:
+                return "ℹ️ **GitHub Access Confirmed:** Connected to your GitHub account/repository, but no GitHub Actions workflows (`.github/workflows/*.yml`) are currently configured in the target repository."
             rows = []
-            for it in items[:20]:
-                if not isinstance(it, dict):
-                    continue
-                num = it.get("number", "N/A")
-                title = it.get("title", "No title")
-                if len(title) > 45:
-                    title = title[:42] + "..."
-                state = format_state_badge(it.get("state", "open"))
-                html_url = it.get("html_url", "")
-                link_str = f"[#{num}]({html_url})" if html_url else f"#{num}"
-                rows.append(f"| {link_str} | {title} | {state} |")
-
+            for wf in workflows:
+                w_name = wf.get("name", "Workflow")
+                w_state = format_state_badge(wf.get("state", "active"))
+                w_path = wf.get("path", "")
+                w_url = wf.get("html_url", "")
+                link_str = f"[{w_name}]({w_url})" if w_url else f"**{w_name}**"
+                rows.append(f"| {link_str} | {w_state} | `{w_path}` |")
             table_md = "\n".join(rows)
             return (
-                f"Found **{len(items)} Item(s)** in GitHub:\n\n"
-                f"| Issue / PR | Title | State |\n"
+                f"Found **{len(workflows)} Workflow(s)** in GitHub:\n\n"
+                f"| Workflow Name | State | Path |\n"
                 f"| :--- | :--- | :--- |\n"
                 f"{table_md}"
             )
@@ -889,10 +887,10 @@ def format_tool_output_human_readable(server_id: str, tool_name: str, raw_output
                 f"{table_md}"
             )
 
-    # 5. Generic Multi-Platform Fallback (Zero hardcoding assumption)
+    # 6. Generic Multi-Platform Fallback (Zero hardcoding assumption)
     items = None
     if isinstance(data, dict):
-        for k in ["value", "result", "items", "data", "records", "repositories", "projects", "incidents", "jobs"]:
+        for k in ["value", "result", "items", "data", "records", "repositories", "projects", "incidents", "jobs", "workflows"]:
             if k in data and isinstance(data[k], list):
                 items = data[k]
                 break
@@ -1095,6 +1093,8 @@ Explain the result directly to the user. DO NOT dump raw JSON."""
                         timeout=8.0
                     )
                     synth_reply = synth_res.get("content", "").strip()
+                    # Strip any meta preamble from LLM (e.g., "Here is a clean response:")
+                    synth_reply = re.sub(r'^(?:Here(?:\'s| is) (?:a )?(?:clean|concise|formatted)?\s*(?:and\s+concise\s+)?response.*?:?\s*|\s*---\s*)+', '', synth_reply, flags=re.IGNORECASE).strip()
                     if not synth_reply or synth_reply.startswith("```json") or synth_reply.startswith("{") or "```json\n{" in synth_reply:
                         synth_reply = format_tool_output_human_readable(target_server, target_tool, result_content, user_message)
                 except Exception:

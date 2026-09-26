@@ -521,6 +521,28 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         if repo_val:
             target_endpoint = re.sub(r'\\{{(?:repo|repository|repo_name)\\}}', lambda m: str(repo_val), target_endpoint, flags=re.IGNORECASE)
 
+        # Smart discovery: If path still contains un-substituted owner or repo, resolve dynamically via /user/repos
+        if re.search(r'\\{{(?:owner|user|username|org|repo|repository)\\}}', target_endpoint):
+            try:
+                with httpx.Client(verify=False, headers=headers, timeout=6.0) as u_client:
+                    u_res = u_client.get("https://api.github.com/user/repos", params={{"per_page": 5, "sort": "updated"}})
+                    if u_res.status_code == 200:
+                        u_repos = u_res.json()
+                        if u_repos and isinstance(u_repos, list) and len(u_repos) > 0:
+                            first_r = u_repos[0]
+                            auto_owner = (first_r.get("owner") or {{}}).get("login", "")
+                            auto_repo = first_r.get("name", "")
+                            if auto_owner and not owner_val:
+                                target_endpoint = re.sub(r'\\{{(?:owner|user|username|org)\\}}', lambda m: str(auto_owner), target_endpoint, flags=re.IGNORECASE)
+                            if auto_repo and not repo_val:
+                                target_endpoint = re.sub(r'\\{{(?:repo|repository|repo_name)\\}}', lambda m: str(auto_repo), target_endpoint, flags=re.IGNORECASE)
+            except Exception:
+                pass
+
+        # If STILL un-substituted owner or repo, fallback to /user/repos
+        if re.search(r'\\{{(?:owner|user|username|org|repo|repository)\\}}', target_endpoint):
+            target_endpoint = "/user/repos"
+
     if target_endpoint.startswith("http://") or target_endpoint.startswith("https://"):
         url = target_endpoint
     else:
