@@ -1269,12 +1269,100 @@ def _execute_deterministic_agent_fallback(
             overall_status = "healthy"
             logger.info(f"🟢 Fallback Engine: Build #{b_num} is healthy ({b_res or 'succeeded'}). No incidents required.")
 
-    # 2. General Health Sweep Fallback (App Service / VMs / GitHub)
+    # 2. Azure App Service Health & Error Log Guardian Fallback
+    elif any("azure_app_service" in s or "app_service" in s or "webapp" in s for s in tools_req):
+        app_name = ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("site_name") or "devops-vsp-sample-app-shakil"
+        rg_name = ctx.get("resource_group") or "rg-devops-uaenorth"
+
+        # Step 1: Query App Service state
+        _, app_data = _add_step("Get App Service Details", "azure_app_service", "get_app_service_details", {"app_service_name": app_name, "resource_group": rg_name}, f"Azure App Service State Probe ({app_name})")
+
+        # Step 2: Probe Live Application Endpoints & Kudu Logs
+        live_logs = fetch_azure_appservice_logs(app_name)
+        stripped_err = extract_stripped_error_log(live_logs) if live_logs else None
+
+        if stripped_err or (isinstance(app_data, dict) and str(app_data.get("properties", {}).get("state", "")).lower() in ["stopped", "failed"]):
+            overall_status = "incident_created"
+            logger.info(f"🚨 Fallback Engine: Detected runtime anomaly/error on App Service '{app_name}'")
+
+            # Step 3: Query ServiceNow for deduplication
+            existing_sys_id = None
+            if any("servicenow" in s for s in tools_req):
+                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"query": f"active=true^short_descriptionLIKESpring Boot App Error"}, "ServiceNow Incident Deduplication Check")
+                active_incs = sn_query_data.get("result") or [] if isinstance(sn_query_data, dict) else []
+                if active_incs and isinstance(active_incs, list):
+                    existing_sys_id = active_incs[0].get("sys_id") or active_incs[0].get("number")
+                    logger.info(f"🛡️ Deduplication: Active ticket {active_incs[0].get('number')} found.")
+
+            # Step 4: Create Incident if not already existing
+            incident_id = existing_sys_id
+            if any("servicenow" in s for s in tools_req) and not existing_sys_id:
+                inc_args = {
+                    "short_description": "Spring Boot App Error",
+                    "description": f"Automated Alert: Runtime error detected on Azure App Service '{app_name}'. Autonomous SRE investigating root cause.",
+                    "urgency": "2",
+                    "impact": "2",
+                    "category": "Software"
+                }
+                _, inc_data = _add_step("Create Incident", "servicenow", "create_incident", inc_args, "ServiceNow Incident Creation")
+                res_obj = inc_data.get("result") if isinstance(inc_data, dict) else {}
+                if isinstance(res_obj, list) and res_obj:
+                    res_obj = res_obj[0]
+                incident_id = res_obj.get("sys_id") if isinstance(res_obj, dict) else None
+
+            # Step 5: Add Initial Work Note
+            if any("servicenow" in s for s in tools_req) and incident_id:
+                _add_step("Add Work Note", "servicenow", "add_work_notes", {
+                    "sys_id": incident_id,
+                    "work_notes": f"🤖 Autonomous SRE Agent is investigating application error on {app_name}."
+                }, "ServiceNow Work Notes Triage Update")
+
+            # Step 6: AI RCA Synthesis
+            s_num = len(steps_log) + 1
+            rca_res = generate_ai_rca(
+                stripped_err or f"HTTP 500 error or crash on {app_name}",
+                f"{app_name} (Spring Boot App)",
+                app_context=f"Azure App Service: {app_name} | Resource Group: {rg_name} | Spring Boot Application"
+            )
+            rca_md = rca_res.get("formatted_rca_markdown", f"### Root Cause Analysis\n\nRuntime anomaly detected on {app_name}.")
+            steps_log.append({
+                "step": s_num,
+                "name": f"AI Root Cause Analysis ({rca_res.get('incident_title', 'Root Cause Identified')})",
+                "status": "success",
+                "details": f"AI RCA Synthesized: {rca_res.get('incident_title')}",
+                "mcp_output": rca_md[:1500]
+            })
+            step_outputs.append({
+                "step": s_num,
+                "action": "AI Root Cause Analysis",
+                "server": "built_in",
+                "tool": "generate_ai_rca",
+                "success": True,
+                "output": rca_md
+            })
+
+            # Step 7: Update ServiceNow with RCA
+            if any("servicenow" in s for s in tools_req) and incident_id:
+                _add_step("Update Incident with RCA", "servicenow", "add_work_notes", {
+                    "sys_id": incident_id,
+                    "work_notes": f"🔍 [AI Root Cause Analysis & Remediation Plan]\n\n{rca_md}"
+                }, "ServiceNow Incident Remediation Update")
+
+        else:
+            overall_status = "healthy"
+            s_num = len(steps_log) + 1
+            steps_log.append({
+                "step": s_num,
+                "name": f"Application Health Verification ({app_name})",
+                "status": "success",
+                "details": f"🟢 Application '{app_name}' is fully healthy & operational (HTTP 200). No active runtime errors or stack traces detected. No tickets required."
+            })
+            logger.info(f"🟢 Fallback Engine: App Service '{app_name}' is healthy. No incidents required.")
+
+    # 3. General Health Sweep Fallback (VMs / GitHub)
     else:
         for srv in tools_req:
-            if "azure_app_service" in srv:
-                _add_step("List App Services", "azure_app_service", "list_app_services", {}, "Azure App Services Health Sweep")
-            elif "azure_virtual_machines" in srv or "azure_vms" in srv:
+            if "azure_virtual_machines" in srv or "azure_vms" in srv:
                 _add_step("List Virtual Machines", "azure_virtual_machines", "list_vms", {}, "Azure Virtual Machines Power State Sweep")
             elif "github" in srv:
                 _add_step("List Repositories", "github", "list_repositories", {}, "GitHub Repository Sweep")

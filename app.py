@@ -474,7 +474,7 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
 
     # Domain specific parameter extractions
     vm_val = args.get("vm_name") or args.get("virtual_machine_name") or args.get("vmName") or args.get("target_vm") or args.get("name") or ""
-    app_val = args.get("app_name") or args.get("appName") or args.get("site_name") or args.get("siteName") or args.get("webapp_name") or args.get("web_app") or args.get("name") or ""
+    app_val = args.get("app_service_name") or args.get("app_name") or args.get("appName") or args.get("site_name") or args.get("siteName") or args.get("webapp_name") or args.get("web_app") or args.get("name") or creds.get("app_service_name") or ""
     item_id_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id") or args.get("item_id") or args.get("record_id") or ""
     sub_val = args.get("subscription_id") or args.get("subscriptionId") or args.get("subscription") or args.get("sub_id") or creds.get("subscription_id") or creds.get("azure_subscription_id") or os.environ.get("AZURE_SUBSCRIPTION_ID", "")
     rg_val = args.get("resource_group") or args.get("resourceGroupName") or args.get("resource_group_name") or args.get("rg") or creds.get("resource_group") or creds.get("azure_resource_group") or os.environ.get("AZURE_RESOURCE_GROUP", "")
@@ -492,7 +492,7 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
     if vm_val:
         target_endpoint = re.sub(r'\\{{(?:vm_?name|virtual_?machine(?:_?name)?|vmName|name)\\}}', lambda m: str(vm_val), target_endpoint, flags=re.IGNORECASE)
     if app_val:
-        target_endpoint = re.sub(r'\\{{(?:app_?name|site_?name|webapp_?name|appName|siteName|name)\\}}', lambda m: str(app_val), target_endpoint, flags=re.IGNORECASE)
+        target_endpoint = re.sub(r'\\{{(?:app_?service_?name|app_?name|site_?name|webapp_?name|appName|siteName|name)\\}}', lambda m: str(app_val), target_endpoint, flags=re.IGNORECASE)
     if item_id_val:
         target_endpoint = re.sub(r'\\{{(?:incident_?id|sys_?id|record_?id|item_?id|number|id)\\}}', lambda m: str(item_id_val), target_endpoint, flags=re.IGNORECASE)
     if sub_val:
@@ -504,16 +504,21 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
     if proj_val:
         target_endpoint = re.sub(r'\\{{(?:project(?:_?(?:name|id|key))?|projectId)\\}}', lambda m: str(proj_val), target_endpoint, flags=re.IGNORECASE)
 
+    # Azure ARM: Auto-format ARM endpoint and API version (only for Azure ARM, not Azure DevOps)
+    is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
+    is_arm = not is_ado and any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"])
+
+    # Clean /health and /logs endpoints to canonical Azure ARM site resource
+    if is_arm and any(w in srv_lower for w in ["app_service", "appservice", "web"]):
+        if target_endpoint.endswith("/health") or target_endpoint.endswith("/logs"):
+            target_endpoint = target_endpoint.rsplit("/", 1)[0]
+
     for k, v in list(creds.items()):
         if not v or k in ["base_url", "auth_val"]:
             continue
         k_clean = str(k).lower()
         k_no_us = k_clean.replace("_", "")
         target_endpoint = re.sub(r'\\{{(?:' + re.escape(k_clean) + r'|' + re.escape(k_no_us) + r')\\}}', lambda m, val=str(v): val, target_endpoint, flags=re.IGNORECASE)
-
-    # Azure ARM: Auto-format ARM endpoint and API version (only for Azure ARM, not Azure DevOps)
-    is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
-    is_arm = not is_ado and any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"])
 
     if is_arm:
         if "/subscriptions/" not in target_endpoint:
