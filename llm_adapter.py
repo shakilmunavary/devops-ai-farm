@@ -91,37 +91,46 @@ class UniversalLLMClient:
         self.config = self.load_config()
 
     def load_config(self) -> Dict[str, Any]:
-        """Loads active LLM configuration from config.json or environment."""
+        """Loads active LLM configuration from llm_config.json, config.json, or environment."""
+        from dotenv import load_dotenv
+        if os.path.exists(ENV_FILE):
+            load_dotenv(ENV_FILE, override=True)
+
         cfg = {
-            "provider": os.environ.get("LLM_PROVIDER", "groq"),
-            "endpoint": os.environ.get("LLM_ENDPOINT", ""),
-            "api_key": os.environ.get("LLM_API_KEY", ""),
-            "model": os.environ.get("LLM_MODEL", ""),
+            "provider": os.environ.get("LLM_PROVIDER") or os.environ.get("AI_PROVIDER", "mistral"),
+            "endpoint": os.environ.get("LLM_ENDPOINT") or os.environ.get("AI_API_URL", ""),
+            "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("MISTRAL_API_KEY", ""),
+            "model": os.environ.get("LLM_MODEL") or os.environ.get("MISTRAL_MODEL", "codestral-latest"),
             "temperature": float(os.environ.get("LLM_TEMPERATURE", "0.2")),
             "max_tokens": int(os.environ.get("LLM_MAX_TOKENS", "4096")),
             "timeout_seconds": int(os.environ.get("LLM_TIMEOUT", "60"))
         }
 
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    file_cfg = json.load(f)
-                    llm_cfg = file_cfg.get("llm_config", {})
-                    for k, v in llm_cfg.items():
-                        if v is not None and v != "":
-                            cfg[k] = v
-            except Exception as e:
-                logger.warning(f"Could not read config.json: {e}")
+        for path_cand in [CONFIG_FILE, os.path.join(BASE_DIR, "persistent_data", "llm_config.json"), os.path.join(BASE_DIR, "llm_config.json")]:
+            if os.path.exists(path_cand):
+                try:
+                    with open(path_cand, "r", encoding="utf-8") as f:
+                        file_cfg = json.load(f)
+                        llm_cfg = file_cfg.get("llm_config", file_cfg)
+                        for k, v in llm_cfg.items():
+                            if v is not None and v != "":
+                                if k == "mistral_api_key" and "api_key" not in llm_cfg:
+                                    cfg["api_key"] = v
+                                else:
+                                    cfg[k] = v
+                    break
+                except Exception as e:
+                    logger.warning(f"Could not read {path_cand}: {e}")
 
         # Fill defaults based on provider preset if missing
-        provider = cfg.get("provider", "groq")
-        preset = PROVIDER_PRESETS.get(provider, PROVIDER_PRESETS["groq"])
-        if not cfg.get("endpoint"):
+        provider = cfg.get("provider", "mistral")
+        preset = PROVIDER_PRESETS.get(provider, PROVIDER_PRESETS.get("mistral", {}))
+        if not cfg.get("endpoint") and preset.get("base_url"):
             cfg["endpoint"] = preset["base_url"]
-        if not cfg.get("model"):
+        if not cfg.get("model") and preset.get("default_model"):
             cfg["model"] = preset["default_model"]
-        if not cfg.get("api_key"):
-            cfg["api_key"] = os.environ.get(preset.get("env_key", ""), "")
+        if not cfg.get("api_key") and preset.get("env_key"):
+            cfg["api_key"] = os.environ.get(preset["env_key"], "")
 
         return cfg
 

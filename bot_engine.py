@@ -880,14 +880,13 @@ Return your analysis in STRICT JSON format:
     ]
 
     try:
+        from mistral_service import parse_and_repair_json
         res = llm_client.chat_completion(messages=messages, temperature=0.2, max_tokens=2048)
         content = res.get("content", "").strip()
-        # Clean markdown code blocks if model returns ```json ... ```
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-        return json.loads(content)
+        parsed = parse_and_repair_json(content)
+        if isinstance(parsed, dict) and (parsed.get("root_cause") or parsed.get("incident_title")):
+            return parsed
+        raise ValueError("Invalid RCA structure returned by LLM")
     except Exception as e:
         logger.error(f"Error calling Universal LLM for RCA: {e}")
         
