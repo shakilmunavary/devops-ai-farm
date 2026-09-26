@@ -1405,21 +1405,25 @@ CRITICAL RULES:
 # Conversational AI Bot Architect Engine
 # ==============================================================================
 
-BOT_ARCHITECT_SYSTEM_PROMPT = """You are the Senior Lead Autonomous DevOps Bot Architect.
-Your role is to conduct a collaborative, conversational interview with the user to architect a universal autonomous DevOps workflow bot using their currently connected MCP servers, custom triggers, and built-in system capabilities.
+BOT_ARCHITECT_SYSTEM_PROMPT = """You are the Lead Enterprise Autonomous DevOps Bot Architect.
+Your role is to conduct a collaborative, conversational interview with the user to architect a universal autonomous DevOps workflow bot tailored to their EXACT requirements, using their currently connected MCP servers, custom triggers, and built-in system capabilities.
 
 BUILT-IN PYTHON SDK CAPABILITIES:
-- from bot_engine import fetch_container_logs, fetch_azure_appservice_logs, extract_stripped_error_log, generate_ai_rca, execute_mcp_tool_on_gateway, run_bot_workflow
+- from bot_engine import execute_mcp_tool_on_gateway, fetch_container_logs, fetch_azure_appservice_logs, extract_stripped_error_log, generate_ai_rca, run_bot_workflow
 
 CURRENT CONNECTED EXTERNAL MCP SERVERS & AVAILABLE TOOLS:
 {mcp_catalog}
 
+ARCHITECTURAL PRINCIPLES:
+1. 100% REQUIREMENT-DRIVEN: Build workflows that match the user's specific DevOps mission (e.g. Azure DevOps Pipeline Guardian & Bug Triage, GitHub PR Code Reviewer, Cloud VM Operations, ServiceNow ITSM Triage, App Service Health Watchdog, or hybrid multi-tool orchestration).
+2. REAL TOOL MAPPING: Map workflow steps to actual available tools from the connected MCP catalog above.
+3. CLEAR CONTEXT: Extract and populate target parameters in "context_config" (e.g. "project": "AI-POC", "pipeline": "...", "repo": "...", "vm_name": "...").
+4. ACCURATE STEPS: Each step in "workflow_steps" must specify "step", "action", "server", "tool", and "arguments".
+
 SCHEDULING & FREQUENCY SUPPORT:
-The bot can be scheduled in multiple modes:
 1. "interval": Recurring interval every N minutes or seconds (e.g. interval_minutes: 5, interval_seconds: 300)
 2. "calendar": Calendar date range (start_date: "YYYY-MM-DD", end_date: "YYYY-MM-DD") at specific times of day (execution_times: ["09:00", "18:00"]) on active days (days_of_week: ["Mon", "Tue", "Wed", "Thu", "Fri"] or all days).
 3. "on_demand": Manual or webhook-triggered only.
-Always understand the user's desired run frequency or default to a sensible interval (e.g. 5 minutes).
 
 RESPONSE FORMAT (STRICT JSON ONLY):
 {{
@@ -1427,8 +1431,8 @@ RESPONSE FORMAT (STRICT JSON ONLY):
   "reply": "Markdown explanation with understanding summary, capability validation badges, and any follow-up questions",
   "validation": {{
     "supported": true,
-    "servers_used": ["servicenow", "azure_devops", "azure_app_service"],
-    "tools_mapped": ["servicenow.create_incident", "servicenow.add_work_note", "servicenow.query_incidents", "azure_devops.get_file_content", "azure_devops.list_builds"],
+    "servers_used": ["azure_devops"],
+    "tools_mapped": ["azure_devops.list_builds", "azure_devops.list_pipelines"],
     "missing_servers": []
   }},
   "blueprint": {{
@@ -1440,31 +1444,20 @@ RESPONSE FORMAT (STRICT JSON ONLY):
     "schedule": {{
       "type": "interval",
       "interval_minutes": 5,
-      "interval_seconds": 300,
-      "start_date": "2026-09-20",
-      "end_date": "2026-09-30",
-      "execution_times": ["09:00"],
-      "days_of_week": []
+      "interval_seconds": 300
     }},
-    "instructions": "Full natural language instructions",
-    "tools_required": ["servicenow", "azure_devops", "azure_app_service"],
+    "instructions": "Full natural language instructions matching user requirement",
+    "tools_required": ["azure_devops"],
     "context_config": {{
-      "container_name": "devops-vsp-sample-app-shakil",
-      "ado_repo": "AI-POC",
-      "ado_file_path": "src/main/java/com/model/User.java",
-      "ado_pipeline": "AI-POC-CI-CD",
-      "servicenow_short_description": "Spring Boot App Error"
+      "project": "AI-POC",
+      "top": 5
     }},
     "workflow_steps": [
-      {{"step": 1, "action": "Actively inspect application logs and strip error signatures", "server": "azure_app_service", "tool": "get_app_service_logs"}},
-      {{"step": 2, "action": "Verify duplicate tickets in ServiceNow", "server": "servicenow", "tool": "query_incidents"}},
-      {{"step": 3, "action": "Create ServiceNow Incident with Subject 'Spring Boot App Error' & attach error snippet", "server": "servicenow", "tool": "create_incident"}},
-      {{"step": 4, "action": "Update Worker Notes: 'AI Agent actively working on resolving the issue'", "server": "servicenow", "tool": "add_work_note"}},
-      {{"step": 5, "action": "Inspect ADO repo 'AI-POC' and file 'src/main/java/com/model/User.java'", "server": "azure_devops", "tool": "get_file_content"}},
-      {{"step": 6, "action": "Check ADO pipeline 'AI-POC-CI-CD' recent builds", "server": "azure_devops", "tool": "list_builds"}},
-      {{"step": 7, "action": "Run AI Root Cause Analysis (RCA) and update ServiceNow ticket with full RCA report", "server": "servicenow", "tool": "add_work_note"}}
+      {{"step": 1, "action": "Query recent CI/CD pipeline builds to detect failed runs", "server": "azure_devops", "tool": "list_builds", "arguments": {{"project": "AI-POC", "top": 5}}}},
+      {{"step": 2, "action": "Inspect active pipeline definitions and branch policies", "server": "azure_devops", "tool": "list_pipelines", "arguments": {{"project": "AI-POC"}}}},
+      {{"step": 3, "action": "Verify repository health and recent commits", "server": "azure_devops", "tool": "list_repositories", "arguments": {{"project": "AI-POC"}}}}
     ],
-    "workflow_code": "# Python script using SDK imports..."
+    "workflow_code": "# Python script using execute_mcp_tool_on_gateway..."
   }}
 }}
 """
@@ -1477,7 +1470,7 @@ def chat_with_bot_architect(user_message: str, history: List[Dict[str, str]], se
         s_name = s_data.get("name", s_id)
         tools = s_data.get("all_tools") or s_data.get("tools") or []
         t_names = [t.get("name") for t in tools if isinstance(t, dict) and t.get("name")]
-        catalog_lines.append(f"- Server '{s_id}' ({s_name}): {', '.join(t_names[:15])}")
+        catalog_lines.append(f"- Server '{s_id}' ({s_name}): {', '.join(t_names[:20])}")
     mcp_catalog = "\n".join(catalog_lines) if catalog_lines else "No external MCP servers registered."
 
     system_prompt = BOT_ARCHITECT_SYSTEM_PROMPT.format(mcp_catalog=mcp_catalog)
@@ -1521,31 +1514,87 @@ def chat_with_bot_architect(user_message: str, history: List[Dict[str, str]], se
         raise ValueError(parsed.get("reply", "No blueprint in model response"))
 
     except Exception as e:
-        logger.warning(f"LLM Bot architect error (fallback active): {e}")
-        # Deterministic Blueprint Synthesis Fallback
-        msg_l = (user_message + " " + " ".join([h.get("content", "") for h in (history or [])])).lower()
-        
-        app_name = "devops-vsp-sample-app-shakil" if ("devops-vsp-sample-app" in msg_l or "springboot" in msg_l or "spring" in msg_l) else ("ai-mcp-platform-shakil" if "ai-mcp" in msg_l else "devops-vsp-sample-app-shakil")
-        desc = "Spring App Error" if "spring" in msg_l else "Application Incident"
-        repo = "springboot-app" if "springboot" in msg_l else "AI-POC"
-        
+        logger.warning(f"LLM Bot architect error (dynamic fallback active): {e}")
+        # Dynamic Deterministic Fallback Synthesis based on user prompt analysis
+        combined_text = (user_message + " " + " ".join([h.get("content", "") for h in (history or [])])).lower()
+
+        is_ado = any(w in combined_text for w in ["azure devops", "azure_devops", "ado", "pipeline", "pipelines", "build", "builds", "guardian", "triage", "vsts", "work item"])
+        is_github = any(w in combined_text for w in ["github", "gh", "pr", "pull request", "repo", "git repo", "issue"])
+        is_vm = any(w in combined_text for w in ["vm", "virtual machine", "virtualmachine", "compute", "runner"])
+        is_app = any(w in combined_text for w in ["app service", "appservice", "webapp", "web app", "site"])
+        is_snow = any(w in combined_text for w in ["servicenow", "snow", "incident", "ticket", "itsm"])
+        is_jenkins = any(w in combined_text for w in ["jenkins", "job"])
+
         servers_used = []
         tools_mapped = []
-        if "azure_app_service" in servers:
-            servers_used.append("azure_app_service")
-            tools_mapped.extend(["azure_app_service.get_app_service_logs", "azure_app_service.restart_app_service"])
-        if "servicenow" in servers:
-            servers_used.append("servicenow")
-            tools_mapped.extend(["servicenow.query_incidents", "servicenow.create_incident", "servicenow.add_work_note", "servicenow.resolve_incident"])
-        if "azure_devops" in servers:
-            servers_used.append("azure_devops")
-            tools_mapped.extend(["azure_devops.get_file_content", "azure_devops.list_builds"])
+        workflow_steps = []
+        ctx = {}
+        bot_name = "Autonomous DevOps Bot"
+        bot_desc = "Autonomous DevOps bot formulated to monitor and automate operations."
+        bot_id = f"bot_{int(time.time())}"
 
-        bot_id = f"auto_workflow_bot_{int(time.time())}"
+        # Extract project, repo, or entity names if mentioned
+        proj_match = re.search(r'\b(?:project|in|for)\s+([a-zA-Z0-9_\-]+)\b', combined_text)
+        project_val = proj_match.group(1) if proj_match and proj_match.group(1).lower() not in ["the", "this", "my", "all", "our", "an"] else "AI-POC"
+
+        step_idx = 1
+
+        if is_ado and "azure_devops" in servers:
+            servers_used.append("azure_devops")
+            bot_name = "Azure DevOps Pipeline Guardian & Bug Triage Bot"
+            bot_desc = f"Monitors Azure DevOps project '{project_val}' CI/CD pipelines, inspects recent build executions, detects regressions, and triages build failures."
+            ctx["project"] = project_val
+            ctx["top"] = 5
+
+            tools_mapped.extend(["azure_devops.list_builds", "azure_devops.list_pipelines", "azure_devops.list_repositories"])
+            workflow_steps.append({"step": step_idx, "action": f"Query recent Azure DevOps pipeline builds for project '{project_val}'", "server": "azure_devops", "tool": "list_builds", "arguments": {"project": project_val, "top": 5}})
+            step_idx += 1
+            workflow_steps.append({"step": step_idx, "action": f"Inspect active CI/CD pipeline definitions in '{project_val}'", "server": "azure_devops", "tool": "list_pipelines", "arguments": {"project": project_val}})
+            step_idx += 1
+            workflow_steps.append({"step": step_idx, "action": f"Verify repository state and commits for '{project_val}'", "server": "azure_devops", "tool": "list_repositories", "arguments": {"project": project_val}})
+            step_idx += 1
+
+        if is_github and "github" in servers and not is_ado:
+            servers_used.append("github")
+            bot_name = "GitHub Repository Guardian & PR Review Bot"
+            bot_desc = "Monitors GitHub repositories, inspects open pull requests, and validates continuous integration health."
+            tools_mapped.extend(["github.list_repositories", "github.list_pull_requests"])
+            workflow_steps.append({"step": step_idx, "action": "List active GitHub repositories", "server": "github", "tool": "list_repositories", "arguments": {}})
+            step_idx += 1
+
+        if is_vm and ("azure_virtual_machines" in servers or "azure_vms" in servers):
+            vm_srv = "azure_virtual_machines" if "azure_virtual_machines" in servers else "azure_vms"
+            servers_used.append(vm_srv)
+            tools_mapped.extend([f"{vm_srv}.list_vms", f"{vm_srv}.get_vm_details"])
+            workflow_steps.append({"step": step_idx, "action": "Query Azure Virtual Machines power and provisioning state", "server": "azure_virtual_machines", "tool": "list_vms", "arguments": {}})
+            step_idx += 1
+
+        if is_app and ("azure_app_service" in servers or "app_service" in servers):
+            app_srv = "azure_app_service" if "azure_app_service" in servers else "app_service"
+            servers_used.append(app_srv)
+            tools_mapped.extend([f"{app_srv}.list_app_services", f"{app_srv}.get_app_service_details"])
+            workflow_steps.append({"step": step_idx, "action": "Inspect Azure App Services runtime status and availability", "server": "azure_app_service", "tool": "list_app_services", "arguments": {}})
+            step_idx += 1
+
+        if is_snow and "servicenow" in servers:
+            servers_used.append("servicenow")
+            tools_mapped.extend(["servicenow.query_incidents", "servicenow.create_incident"])
+            workflow_steps.append({"step": step_idx, "action": "Query active ServiceNow incidents and triage backlog", "server": "servicenow", "tool": "query_incidents", "arguments": {"query": "active=true"}})
+            step_idx += 1
+
+        # Fallback to whatever servers are registered if none matched keywords
+        if not servers_used and servers:
+            first_srv = list(servers.keys())[0]
+            servers_used.append(first_srv)
+            s_tools = [t.get("name") for t in (servers[first_srv].get("tools") or [])]
+            first_t = s_tools[0] if s_tools else "status"
+            tools_mapped.append(f"{first_srv}.{first_t}")
+            workflow_steps.append({"step": 1, "action": f"Execute diagnostic sweep on {first_srv}", "server": first_srv, "tool": first_t, "arguments": {}})
+
         blueprint = {
             "id": bot_id,
-            "name": "Spring Boot Autonomous Bot",
-            "description": f"Monitors {app_name}, deduplicates ServiceNow incidents, extracts error traces, inspects ADO codebase, and performs AI RCA.",
+            "name": bot_name,
+            "description": bot_desc,
             "trigger_type": "interval",
             "interval_seconds": 300,
             "schedule": {
@@ -1556,69 +1605,83 @@ def chat_with_bot_architect(user_message: str, history: List[Dict[str, str]], se
             "status": "active",
             "instructions": user_message,
             "tools_required": servers_used,
-            "context_config": {
-                "container_name": app_name,
-                "ado_repo": repo,
-                "ado_branch": "main",
-                "ado_pipeline": "AI-POC-CI-CD",
-                "servicenow_short_description": desc
-            },
-            "workflow_steps": [
-                {"step": 1, "action": f"Query ServiceNow for open tickets with Short Description '{desc}'", "server": "servicenow", "tool": "query_incidents"},
-                {"step": 2, "action": f"Fetch latest logs from App Service '{app_name}' and strip error trace", "server": "azure_app_service", "tool": "get_app_service_logs"},
-                {"step": 3, "action": f"Create ServiceNow Incident '{desc}' if no duplicate exists", "server": "servicenow", "tool": "create_incident"},
-                {"step": 4, "action": "Attach raw Error Snippet alone to Ticket Work Notes", "server": "servicenow", "tool": "add_work_note"},
-                {"step": 5, "action": "Add Work Note: '🤖 AI Bot is looking into the issue'", "server": "servicenow", "tool": "add_work_note"},
-                {"step": 6, "action": f"Inspect ADO repo '{repo}' (main branch) and check recent pipeline builds", "server": "azure_devops", "tool": "get_file_content"},
-                {"step": 7, "action": "Execute AI RCA and update Ticket with complete detailed RCA report", "server": "servicenow", "tool": "add_work_note"},
-                {"step": 8, "action": "Resolve / Close Ticket in ServiceNow (State: 6)", "server": "servicenow", "tool": "resolve_incident"}
-            ],
-            "workflow_code": f"""# Auto-Synthesized Autonomous Bot
-from bot_engine import fetch_azure_appservice_logs, extract_stripped_error_log, generate_ai_rca, execute_mcp_tool_on_gateway
+            "context_config": ctx,
+            "workflow_steps": workflow_steps,
+            "workflow_code": f"""# Auto-Synthesized Autonomous Bot: {bot_name}
+import json
+from bot_engine import execute_mcp_tool_on_gateway, generate_dynamic_execution_report
 
 def execute_workflow(ctx):
-    app_name = ctx.get("container_name", "{app_name}")
-    desc = ctx.get("servicenow_short_description", "{desc}")
-    repo = ctx.get("ado_repo", "{repo}")
+    ctx = ctx or {{}}
+    steps_log = []
+    step_outputs = []
+    workflow_steps = {json.dumps(workflow_steps, indent=4)}
+    
+    for idx, s in enumerate(workflow_steps):
+        s_num = idx + 1
+        s_action = s.get("action", f"Step {{s_num}}")
+        s_server = s.get("server", "")
+        s_tool = s.get("tool", "")
+        s_args = dict(s.get("arguments") or {{}})
+        for ck, cv in ctx.items():
+            if ck not in s_args and cv is not None:
+                s_args[ck] = cv
 
-    # 1. Duplicate check
-    q_res = execute_mcp_tool_on_gateway("servicenow", "query_incidents", {{"short_description": desc}})
-    active_incidents = [inc for inc in q_res.get("raw", {{}}).get("result", []) if str(inc.get("state")) not in ["6", "7", "8"]]
-    if active_incidents:
-        return {{"status": "skipped", "message": f"Active ticket already exists: {{active_incidents[0].get('number')}}"}}
+        step_record = {{
+            "step": s_num,
+            "name": f"{{s_action}} ({{s_server}}.{{s_tool}})" if s_server and s_tool else s_action,
+            "status": "in_progress",
+            "details": f"Invoking {{s_server}}.{{s_tool}}..." if s_server and s_tool else f"Executing {{s_action}}..."
+        }}
+        steps_log.append(step_record)
 
-    # 2. Fetch logs & strip error
-    logs = fetch_azure_appservice_logs(app_name)
-    err = extract_stripped_error_log(logs)
+        if s_server and s_tool:
+            tool_res = execute_mcp_tool_on_gateway(s_server, s_tool, s_args)
+            raw_out = tool_res.get("output", "")
+            is_success = tool_res.get("success", False)
+            step_outputs.append({{
+                "step": s_num,
+                "action": s_action,
+                "server": s_server,
+                "tool": s_tool,
+                "success": is_success,
+                "output": raw_out
+            }})
+            if is_success:
+                step_record["status"] = "success"
+                step_record["details"] = f"Completed successfully: {{raw_out[:180].replace(chr(10), ' ')}}" if raw_out else "Step completed successfully."
+                step_record["mcp_output"] = raw_out[:1500]
+            else:
+                step_record["status"] = "warning"
+                step_record["details"] = f"Notice: {{raw_out[:180].replace(chr(10), ' ')}}"
+                step_record["mcp_output"] = raw_out[:1500]
+        else:
+            step_record["status"] = "success"
+            step_record["details"] = f"{{s_action}} completed."
 
-    # 3. Create Ticket
-    cr_res = execute_mcp_tool_on_gateway("servicenow", "create_incident", {{"short_description": desc, "category": "Software"}})
-    inc_data = cr_res.get("raw", {{}}).get("result", {{}})
-    inc_id = inc_data.get("sys_id") or inc_data.get("number")
+    safe_inst = {json.dumps(user_message)}
+    report_md = generate_dynamic_execution_report(
+        bot_name="{bot_name}",
+        instructions=safe_inst,
+        steps_log=steps_log,
+        step_outputs=step_outputs,
+        context=ctx,
+        status="healthy"
+    )
 
-    # 4. Attach Error Snippet
-    execute_mcp_tool_on_gateway("servicenow", "add_work_note", {{"incident_id": inc_id, "work_notes": f"Error Snippet:\\n{{err[:1000]}}"}})
-
-    # 5. AI Bot Work Note
-    execute_mcp_tool_on_gateway("servicenow", "add_work_note", {{"incident_id": inc_id, "work_notes": "🤖 AI Bot is looking into the issue."}})
-
-    # 6. ADO Code & Pipeline Inspection
-    ado_res = execute_mcp_tool_on_gateway("azure_devops", "list_builds", {{"project": "AI-POC"}})
-
-    # 7. Complete RCA
-    rca = generate_ai_rca(err, app_name, app_context=f"ADO Repo: {{repo}} (main branch)")
-    execute_mcp_tool_on_gateway("servicenow", "add_work_note", {{"incident_id": inc_id, "work_notes": rca.get("formatted_rca_markdown", "")}})
-
-    # 8. Close ticket
-    execute_mcp_tool_on_gateway("servicenow", "resolve_incident", {{"incident_id": inc_id, "state": "6"}})
-
-    return {{"status": "success", "incident": inc_id, "rca": rca}}
+    summary_text = f"Bot '{bot_name}' executed {{len(workflow_steps)}} steps successfully."
+    return {{
+        "status": "healthy",
+        "summary": summary_text,
+        "report_markdown": report_md,
+        "steps": steps_log
+    }}
 """
         }
 
         return {
             "status": "ready",
-            "reply": f"🤖 **Synthesized Autonomous Bot Blueprint successfully!**\n\n* **Target App**: `{app_name}`\n* **ServiceNow Trigger**: `{desc}`\n* **ADO Repo**: `{repo}`\n* **Tools Mapped**: {len(tools_mapped)} tools validated across `{', '.join(servers_used)}`.\n\nClick **Deploy Autonomous Bot** to save and activate this workflow.",
+            "reply": f"🤖 **Synthesized Autonomous Bot Blueprint successfully!**\n\n* **Bot Name**: `{bot_name}`\n* **Mission**: {bot_desc}\n* **Tools Mapped**: {len(tools_mapped)} tools validated across `{', '.join(servers_used)}`.\n* **Workflow Steps**: {len(workflow_steps)} automated step(s) ready.\n\nClick **Deploy Autonomous Bot** to activate this workflow.",
             "validation": {
                 "supported": True,
                 "servers_used": servers_used,
@@ -1627,3 +1690,4 @@ def execute_workflow(ctx):
             },
             "blueprint": blueprint
         }
+
