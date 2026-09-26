@@ -44,8 +44,8 @@ PROVIDER_PRESETS = {
     "mistral": {
         "name": "Mistral AI",
         "base_url": "https://api.mistral.ai/v1/chat/completions",
-        "default_model": "mistral-small-latest",
-        "supported_models": ["mistral-small-latest", "open-mistral-nemo", "codestral-latest", "mistral-large-latest"],
+        "default_model": "mistral-large-latest",
+        "supported_models": ["mistral-large-latest", "codestral-latest", "open-mistral-nemo", "ministral-8b-latest", "mistral-small-latest"],
         "auth_type": "bearer",
         "env_key": "MISTRAL_API_KEY"
     },
@@ -234,6 +234,11 @@ class UniversalLLMClient:
 
         with httpx.Client(timeout=timeout_sec) as client:
             response = client.post(endpoint, headers=headers, json=payload)
+            if response.status_code == 403 and "tier_not_allowed" in response.text and model == "mistral-large-latest":
+                logger.warning("Mistral AI returned 403 (tier_not_allowed) for 'mistral-large-latest'. Automatically falling back to 'codestral-latest' for this request.")
+                payload["model"] = "codestral-latest"
+                response = client.post(endpoint, headers=headers, json=payload)
+
             if response.status_code != 200:
                 try:
                     err_json = response.json()
