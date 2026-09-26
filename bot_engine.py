@@ -573,8 +573,186 @@ def fetch_container_logs(container_name: str) -> str:
 # AI RCA & Autonomous Execution Engine
 # ==============================================================================
 
+def parse_output_as_data(text_out: str, raw_data: Any) -> Any:
+    """Attempts to parse tool output as structured JSON/dict/list."""
+    if isinstance(raw_data, (dict, list)):
+        if isinstance(raw_data, dict) and "result" in raw_data and isinstance(raw_data["result"], (dict, list)):
+            return raw_data["result"]
+        return raw_data
+
+    if not text_out:
+        return {}
+
+    clean_text = str(text_out).strip()
+    if "```json" in clean_text:
+        try:
+            json_str = clean_text.split("```json")[1].split("```")[0].strip()
+            return json.loads(json_str)
+        except Exception:
+            pass
+    elif "```" in clean_text:
+        try:
+            json_str = clean_text.split("```")[1].split("```")[0].strip()
+            return json.loads(json_str)
+        except Exception:
+            pass
+
+    try:
+        return json.loads(clean_text)
+    except Exception:
+        pass
+
+    return {"text": clean_text}
+
+
+def get_nested_value(data: Any, path: str) -> Any:
+    """Extracts nested value using dot notation, e.g. 'output.builds[0].id' or 'result[0].sys_id'."""
+    if not path or data is None:
+        return data
+
+    parts = re.findall(r'[^.\[\]]+|\[\d+\]', path)
+    current = data
+    for part in parts:
+        if current is None:
+            return None
+        if part.startswith('[') and part.endswith(']'):
+            try:
+                idx = int(part[1:-1])
+                if isinstance(current, list) and 0 <= idx < len(current):
+                    current = current[idx]
+                else:
+                    return None
+            except Exception:
+                return None
+        elif isinstance(current, dict):
+            if part in current:
+                current = current[part]
+            elif part == "output" and "data" in current:
+                current = current["data"]
+            elif part == "builds" and "value" in current:
+                current = current["value"]
+            elif part == "incidents" and "result" in current:
+                current = current["result"]
+            elif part == "incident" and "result" in current:
+                current = current["result"]
+            elif part == "incident" and isinstance(current.get("result"), list) and current["result"]:
+                current = current["result"][0]
+            elif part == "error_log" and "output" in current:
+                current = current["output"]
+            elif part == "content" and "text" in current:
+                current = current["text"]
+            else:
+                return None
+        elif isinstance(current, list):
+            if current and isinstance(current[0], dict) and part in current[0]:
+                current = current[0][part]
+            else:
+                return None
+        else:
+            return None
+    return current
+
+
+def resolve_variable_path(var_path: str, execution_state: Dict[str, Any]) -> Any:
+    """Resolves a variable path like step_1.output.builds[0].id against execution_state."""
+    parts = var_path.split('.', 1)
+    root_key = parts[0]
+    rest = parts[1] if len(parts) > 1 else ""
+
+    root_data = execution_state.get(root_key)
+    if root_data is None:
+        root_data = execution_state.get("context", {}).get(root_key)
+        if root_data is None:
+            if root_key == "builds":
+                root_data = execution_state.get("builds")
+            elif root_key == "incidents":
+                root_data = execution_state.get("incidents")
+            elif root_key == "incident":
+                root_data = execution_state.get("incident")
+            elif root_key == "latest_build":
+                root_data = execution_state.get("latest_build")
+            elif root_key == "rca":
+                root_data = execution_state.get("rca")
+
+    if root_data is None:
+        return None
+
+    if not rest:
+        return root_data
+
+    return get_nested_value(root_data, rest)
+
+
+def resolve_template_variables(val: Any, execution_state: Dict[str, Any]) -> Any:
+    """Recursively resolves template variables in strings, dictionaries, or lists."""
+    if isinstance(val, dict):
+        return {k: resolve_template_variables(v, execution_state) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [resolve_template_variables(item, execution_state) for item in val]
+    elif isinstance(val, str):
+        single_match = re.fullmatch(r'\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\}\}', val.strip())
+        if single_match:
+            var_path = single_match.group(1)
+            resolved = resolve_variable_path(var_path, execution_state)
+            if resolved is not None:
+                return resolved
+
+        def _replace_match(m):
+            v_path = m.group(1)
+            res = resolve_variable_path(v_path, execution_state)
+            return str(res) if res is not None else ""
+
+        return re.sub(r'\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\}\}', _replace_match, val)
+
+    return val
+
+
+def evaluate_condition(condition_str: str, execution_state: Dict[str, Any]) -> bool:
+    """Evaluates step conditions safely."""
+    if not condition_str or not isinstance(condition_str, str):
+        return True
+
+    clean_expr = condition_str.strip()
+    if clean_expr.startswith("{{") and clean_expr.endswith("}}"):
+        clean_expr = clean_expr[2:-2].strip()
+
+    if not clean_expr:
+        return True
+
+    clean_expr = clean_expr.replace("!= null", "is not None").replace("== null", "is None")
+    clean_expr = clean_expr.replace("null", "None").replace("true", "True").replace("false", "False")
+
+    var_matches = re.findall(r'([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_.\[\]]+)*)', clean_expr)
+    for v_name in var_matches:
+        if v_name in ["True", "False", "None", "len", "is", "not", "and", "or"]:
+            continue
+        if v_name.endswith(".length"):
+            base_v = v_name[:-7]
+            val = resolve_variable_path(base_v, execution_state)
+            count = len(val) if isinstance(val, (list, dict, str)) else (1 if val else 0)
+            clean_expr = clean_expr.replace(v_name, str(count))
+        else:
+            val = resolve_variable_path(v_name, execution_state)
+            if isinstance(val, (int, float)):
+                clean_expr = clean_expr.replace(v_name, str(val))
+            elif isinstance(val, str):
+                clean_expr = clean_expr.replace(v_name, f"'{val}'")
+            elif isinstance(val, list):
+                clean_expr = clean_expr.replace(v_name, f"{len(val)}")
+            elif val is None:
+                clean_expr = clean_expr.replace(v_name, "None")
+            else:
+                clean_expr = clean_expr.replace(v_name, f"'{str(val)}'")
+
+    try:
+        return bool(eval(clean_expr, {"__builtins__": {"len": len}}))
+    except Exception as e:
+        logger.warning(f"Notice evaluating condition '{condition_str}': {e}")
+        return True
+
+
 def execute_mcp_tool_on_gateway(server_id: str, tool_name: str, arguments: dict, gateway_url: str = None) -> dict:
-    """Executes an MCP tool call with immediate in-process priority to prevent deadlocks."""
+    """Executes an MCP tool call with immediate in-process priority and JSON parsing."""
     # 1. Preferred Direct In-Process Execution (Instantaneous & Zero Deadlock)
     try:
         from gateway_manager import execute_tool_call
@@ -586,10 +764,13 @@ def execute_mcp_tool_on_gateway(server_id: str, tool_name: str, arguments: dict,
                     text_out += item.get("text", "")
             if not text_out:
                 text_out = str(direct_res.get("result", direct_res))
+            
+            parsed_data = parse_output_as_data(text_out, direct_res)
             return {
                 "success": not direct_res.get("isError", False) and "error" not in direct_res,
                 "output": text_out,
-                "raw": direct_res
+                "raw": direct_res,
+                "data": parsed_data
             }
     except Exception as e:
         logger.warning(f"In-process tool call notice: {e}")
@@ -627,12 +808,17 @@ def execute_mcp_tool_on_gateway(server_id: str, tool_name: str, arguments: dict,
                         text_out = f"Gateway Error: {data['error']}"
                     else:
                         text_out = str(data)
-                    return {"success": not data.get("isError", False) and "error" not in data, "output": text_out, "raw": data}
+                    parsed_data = parse_output_as_data(text_out, data)
+                    return {
+                        "success": not data.get("isError", False) and "error" not in data,
+                        "output": text_out,
+                        "raw": data,
+                        "data": parsed_data
+                    }
         except Exception:
             continue
 
-    return {"success": False, "output": f"Tool {server_id}.{tool_name} execution completed.", "raw": {}}
-
+    return {"success": False, "output": f"Tool {server_id}.{tool_name} execution completed.", "raw": {}, "data": {}}
 
 
 def get_active_ai_config() -> Dict[str, Any]:
@@ -1007,20 +1193,58 @@ def run_bot_workflow(bot_id: str, trigger_reason: str = "Manual Trigger", _is_in
         steps_log = []
         step_outputs = []
         overall_status = "healthy"
+        execution_state = {
+            "context": ctx,
+            "bot_name": bot_name,
+            "bot_id": bot_id,
+            "has_failure": False,
+            "pipeline_healthy": True,
+            "rca": {},
+            "incident": {}
+        }
 
         for idx, step_info in enumerate(workflow_steps):
             step_num = idx + 1
             step_action = step_info.get("action") or step_info.get("name") or f"Step {step_num}"
             step_server = step_info.get("server") or ""
             step_tool = step_info.get("tool") or ""
-            step_args = dict(step_info.get("arguments") or {})
+            step_condition = step_info.get("condition")
+            raw_args = dict(step_info.get("arguments") or {})
 
             if not step_server and tools_req:
                 step_server = tools_req[0]
 
             for ck, cv in ctx.items():
-                if ck not in step_args and cv is not None and str(cv).strip():
-                    step_args[ck] = cv
+                if ck not in raw_args and cv is not None and str(cv).strip():
+                    raw_args[ck] = cv
+
+            # 1. Condition Evaluation
+            if step_condition:
+                cond_passed = evaluate_condition(step_condition, execution_state)
+                if not cond_passed:
+                    step_record = {
+                        "step": step_num,
+                        "name": f"{step_action} ({step_server}.{step_tool})" if step_server and step_tool else step_action,
+                        "status": "skipped",
+                        "details": f"Skipped: Condition not met ({step_condition})."
+                    }
+                    steps_log.append(step_record)
+                    continue
+
+            # 2. Pipeline Health Gate: If pipeline is healthy, skip error/RCA/incident creation steps
+            is_error_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["error", "rca", "incident", "create_incident", "add_work_note", "get_build_logs"])
+            if execution_state.get("pipeline_healthy") and is_error_step and not execution_state.get("has_failure") and step_tool != "query_incidents":
+                step_record = {
+                    "step": step_num,
+                    "name": f"{step_action} ({step_server}.{step_tool})" if step_server and step_tool else step_action,
+                    "status": "skipped",
+                    "details": "Skipped: Pipeline build is healthy & operational (succeeded). No RCA or incident creation required."
+                }
+                steps_log.append(step_record)
+                continue
+
+            # 3. Resolve Template Variables in Arguments
+            step_args = resolve_template_variables(raw_args, execution_state)
 
             step_record = {
                 "step": step_num,
@@ -1030,10 +1254,81 @@ def run_bot_workflow(bot_id: str, trigger_reason: str = "Manual Trigger", _is_in
             }
             steps_log.append(step_record)
 
+            # 4. Handle Built-in AI RCA Tools
+            if step_server in ["built_in", "ai", "mistral", "local"] or step_tool in ["generate_ai_rca", "ai_rca", "perform_rca"]:
+                err_text = step_args.get("error_log") or execution_state.get("error_log") or f"Build failure in {bot_name}"
+                src_code = step_args.get("source_code") or ""
+                rca_data = generate_ai_rca(str(err_text), bot_name, app_context=str(src_code))
+                execution_state[f"step_{step_num}"] = {"output": {"rca": rca_data.get("formatted_rca_markdown"), "title": rca_data.get("incident_title"), "data": rca_data}}
+                execution_state["rca"] = rca_data
+
+                step_record["status"] = "success"
+                step_record["details"] = f"AI RCA Synthesized: {rca_data.get('incident_title', 'Root Cause Identified')}"
+                step_record["mcp_output"] = rca_data.get("formatted_rca_markdown", "")
+
+                step_outputs.append({
+                    "step": step_num,
+                    "action": step_action,
+                    "server": "built_in",
+                    "tool": "generate_ai_rca",
+                    "success": True,
+                    "output": rca_data.get("formatted_rca_markdown", "")
+                })
+                continue
+
+            # 5. Invoke MCP Tool via Gateway
             if step_server and step_tool:
                 tool_res = execute_mcp_tool_on_gateway(step_server, step_tool, step_args)
                 raw_out = tool_res.get("output", "")
                 is_success = tool_res.get("success", False)
+                parsed_data = tool_res.get("data") or parse_output_as_data(raw_out, tool_res.get("raw"))
+
+                # Save to execution state
+                execution_state[f"step_{step_num}"] = {
+                    "output": parsed_data,
+                    "raw": raw_out,
+                    "success": is_success
+                }
+
+                # Tool-specific state enrichments:
+                if step_tool == "list_builds" and isinstance(parsed_data, dict):
+                    builds_list = parsed_data.get("value") or parsed_data.get("builds") or []
+                    if builds_list and isinstance(builds_list, list):
+                        latest_b = builds_list[0]
+                        execution_state["latest_build"] = latest_b
+                        execution_state["builds"] = builds_list
+                        b_status = str(latest_b.get("status", "")).lower()
+                        b_result = str(latest_b.get("result", "")).lower()
+                        b_id = latest_b.get("id")
+                        b_num = latest_b.get("buildNumber")
+
+                        if b_result == "failed" or b_status == "failed":
+                            execution_state["has_failure"] = True
+                            execution_state["pipeline_healthy"] = False
+                            overall_status = "incident_created"
+                            logger.info(f"🚨 Detected failed build #{b_num} (ID: {b_id})")
+                        else:
+                            execution_state["has_failure"] = False
+                            execution_state["pipeline_healthy"] = True
+                            overall_status = "healthy"
+                            logger.info(f"🟢 Latest build #{b_num} (ID: {b_id}) is healthy ({b_result or b_status}).")
+
+                elif step_tool == "query_incidents" and isinstance(parsed_data, dict):
+                    inc_list = parsed_data.get("result") or parsed_data.get("incidents") or []
+                    execution_state["incidents"] = inc_list
+                    if len(inc_list) > 0:
+                        existing_inc = inc_list[0]
+                        execution_state["incident"] = existing_inc
+                        execution_state["has_duplicate_incident"] = True
+                        step_record["details"] = f"Found {len(inc_list)} active incident(s) in ServiceNow ({existing_inc.get('number', 'INC')}). Deduplication active."
+                        logger.info(f"🛡️ Active incident already exists: {existing_inc.get('number')}")
+
+                elif step_tool == "create_incident" and isinstance(parsed_data, dict):
+                    inc_obj = parsed_data.get("result") or parsed_data.get("incident") or parsed_data
+                    if isinstance(inc_obj, list) and inc_obj:
+                        inc_obj = inc_obj[0]
+                    execution_state["incident"] = inc_obj
+                    overall_status = "incident_created"
 
                 step_outputs.append({
                     "step": step_num,
