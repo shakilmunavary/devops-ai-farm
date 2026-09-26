@@ -631,7 +631,38 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         "pullRequestId", "pull_request_id", "incident_id", "sys_id", "number"
     ]
     for pk in path_param_keys:
-        clean_args.pop(pk, None)
+        if not (is_ado and "{fn_name}" == "create_project" and pk in ["project", "projectName"]):
+            clean_args.pop(pk, None)
+
+    # Azure DevOps create_project smart capabilities payload
+    if is_ado and "{fn_name}" == "create_project":
+        proc_map = {{
+            "agile": "adcc42ab-9882-485e-a3ed-7678f01f66bc",
+            "scrum": "6b724908-ef14-45cf-84f8-768b5384da45",
+            "basic": "b8a3a935-7e91-48b8-a94c-606d37c3e9f2",
+            "cmmi": "27450541-8e31-4150-9947-dc59f998fc01"
+        }}
+        proc_raw = str(clean_args.pop("process_template", clean_args.pop("processTemplate", "Agile"))).lower().strip()
+        proc_id = proc_map.get(proc_raw, proc_raw if len(proc_raw) > 30 else "adcc42ab-9882-485e-a3ed-7678f01f66bc")
+        source_type = clean_args.pop("source_control_type", clean_args.pop("sourceControlType", "Git"))
+        vis_val = clean_args.pop("visibility", "private")
+        proj_name = clean_args.get("name") or clean_args.get("project_name") or clean_args.get("projectName") or clean_args.get("project")
+        desc_val = clean_args.get("description", "")
+        
+        clean_args = {{
+            "name": proj_name,
+            "description": desc_val,
+            "visibility": vis_val,
+            "capabilities": {{
+                "versioncontrol": {{
+                    "sourceControlType": source_type
+                }},
+                "processTemplate": {{
+                    "templateTypeId": proc_id
+                }}
+            }}
+        }}
+        query_params = {{"api-version": "7.1-preview.4"}}
     
     try:
         with httpx.Client(verify=False, auth=auth, headers=headers, timeout=25.0, follow_redirects=True) as client:

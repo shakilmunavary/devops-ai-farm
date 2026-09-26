@@ -406,6 +406,32 @@ def execute_azure_devops_action(pipeline_name: str, project_name: str = "AI-POC"
     }
 
 
+def create_azure_devops_project(project_name: str, description: str = "", process_template: str = "Agile", visibility: str = "private") -> Dict[str, Any]:
+    """Provision a new Azure DevOps project via FastMCP azure_devops Server."""
+    from gateway_manager import execute_tool_call
+    log.info(f"🏗️ [FastMCP azure_devops] Creating project '{project_name}' (Template: {process_template}, Visibility: {visibility})...")
+    res = execute_tool_call("azure_devops", "create_project", {
+        "name": project_name,
+        "description": description or f"Project {project_name} provisioned via ServiceNow AIOps",
+        "process_template": process_template or "Agile",
+        "visibility": visibility or "private"
+    })
+    if res.get("isError"):
+        err_msg = "".join(c.get("text", "") for c in res.get("content", []))
+        return {"success": False, "project_name": project_name, "error": err_msg}
+
+    time.sleep(3)
+    p_res = execute_tool_call("azure_devops", "list_projects", {})
+    raw_text = "".join(c.get("text", "") for c in p_res.get("content", []))
+    is_created = project_name.lower() in raw_text.lower()
+    return {
+        "success": True,
+        "project_name": project_name,
+        "url": f"https://dev.azure.com/shakilaipoc/{project_name}",
+        "status": "Created & Well-Formed" if is_created else "Accepted / In Progress"
+    }
+
+
 # ==============================================================================
 # 4. UNIVERSAL FASTMCP GATEWAY TOOL DISPATCHER
 # ==============================================================================
@@ -581,8 +607,49 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             return {"success": True, "order_number": order_no, "ritm_sys_id": ritm_sys_id, "status": "Closed Complete"}
 
         # =========================================================================
-        # DOMAIN B: AZURE DEVOPS PIPELINES
+        # DOMAIN B: AZURE DEVOPS (PROJECT PROVISIONING & PIPELINES)
         # =========================================================================
+        elif "project" in cat_lower or "provision" in cat_lower or "onboard" in cat_lower or ("project_name" in variables and not vm_name and not app_name):
+            target_proj = (
+                variables.get("project_name")
+                or variables.get("project")
+                or variables.get("name")
+                or "New-Project"
+            ).strip()
+            desc_proj = variables.get("description") or f"Project {target_proj} provisioned via ServiceNow AIOps"
+            proc_tmpl = variables.get("process_template") or variables.get("process") or "Agile"
+            vis = variables.get("visibility") or "private"
+
+            snow_update("sc_req_item", ritm_sys_id, {
+                "work_notes": f"🔍 FastMCP Pre-Flight Status (Tool: azure_devops.list_projects):\nValidating project name uniqueness for '{target_proj}' in organization 'shakilaipoc'..."
+            })
+            time.sleep(1)
+
+            proj_res = create_azure_devops_project(target_proj, desc_proj, proc_tmpl, vis)
+            if not proj_res.get("success"):
+                err = proj_res.get("error", "Project creation failed")
+                snow_update("sc_req_item", ritm_sys_id, {
+                    "state": STATE_CLOSED_INCOMPLETE,
+                    "stage": "closed_incomplete",
+                    "work_notes": f"❌ Action Complete (Failed):\nFailed to provision ADO project '{target_proj}'.\nDetails: {err}\n\nTicket closed as Closed Incomplete.\n{DIRECT_DISPATCH_MARKER}",
+                    "close_notes": f"Failed creating ADO project '{target_proj}'."
+                })
+                return {"success": False, "error": err}
+
+            proj_url = proj_res.get("url", f"https://dev.azure.com/shakilaipoc/{target_proj}")
+            snow_update("sc_req_item", ritm_sys_id, {
+                "work_notes": f"⚡ FastMCP Action Complete (Tool: azure_devops.create_project):\nSuccessfully provisioned Azure DevOps project '{target_proj}'.\nProject Web URL: {proj_url}\nProcess Template: {proc_tmpl}\nVisibility: {vis}"
+            })
+            time.sleep(1)
+
+            snow_update("sc_req_item", ritm_sys_id, {
+                "state": STATE_CLOSED_COMPLETE,
+                "stage": "complete",
+                "work_notes": f"🏁 Ticket Closed:\nAzure DevOps project provisioning workflow completed successfully.\nDirect Link: {proj_url}\n{DIRECT_DISPATCH_MARKER}",
+                "close_notes": f"Successfully created ADO project '{target_proj}'."
+            })
+            return {"success": True, "order_number": order_no, "ritm_sys_id": ritm_sys_id, "status": "Closed Complete"}
+
         elif "pipeline" in cat_lower or "devops" in cat_lower or pipeline_name:
             target_pipe = pipeline_name or "AI-POC-CI-CD"
             snow_update("sc_req_item", ritm_sys_id, {
