@@ -472,6 +472,33 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         if "top" in args and "sysparm_limit" not in args:
             args["sysparm_limit"] = args.pop("top")
 
+        # Map resolution and closing fields to prevent Data Policy Exceptions
+        if "{fn_name}" == "resolve_incident" or str(args.get("state")) == "6":
+            args["state"] = "6"
+            args["incident_state"] = "6"
+            if "resolution_code" in args and "close_code" not in args:
+                args["close_code"] = args.pop("resolution_code")
+            if "resolution_notes" in args and "close_notes" not in args:
+                args["close_notes"] = args.pop("resolution_notes")
+            code_lower = str(args.get("close_code", "")).lower()
+            if "workaround" in code_lower:
+                args["close_code"] = "Workaround provided"
+            else:
+                args["close_code"] = "Solution provided"
+            if not args.get("close_notes"):
+                args["close_notes"] = args.get("work_notes") or args.get("notes") or "Resolved by Autonomous SRE AI."
+
+        if "{fn_name}" == "close_incident" or str(args.get("state")) == "7":
+            args["state"] = "7"
+            args["incident_state"] = "7"
+            if not args.get("close_code"):
+                args["close_code"] = "Solution provided"
+            if not args.get("close_notes"):
+                args["close_notes"] = args.get("work_notes") or args.get("notes") or "Closed by Autonomous SRE AI."
+
+        if "work_note" in args and "work_notes" not in args:
+            args["work_notes"] = args.pop("work_note")
+
         # Check for incident identifier
         inc_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id")
         if inc_val and (str(inc_val).upper().startswith("INC") or len(str(inc_val)) != 32):

@@ -657,25 +657,25 @@ def resolve_variable_path(var_path: str, execution_state: Dict[str, Any]) -> Any
     clean_path = var_path.strip("{} \t\r\n")
 
     # Smart common aliases
-    if clean_path in ["incident_sys_id", "sys_id", "incident.sys_id"]:
+    if clean_path in ["incident_sys_id", "sys_id", "incident.sys_id", "incident_id", "incidentId"]:
         inc = execution_state.get("incident")
         if isinstance(inc, dict):
-            return inc.get("sys_id") or inc.get("id")
+            return inc.get("sys_id") or inc.get("id") or execution_state.get("incident_sys_id")
         return execution_state.get("incident_sys_id")
     if clean_path in ["incident_number", "number", "incident.number"]:
         inc = execution_state.get("incident")
         if isinstance(inc, dict):
-            return inc.get("number")
+            return inc.get("number") or execution_state.get("incident_number")
         return execution_state.get("incident_number")
-    if clean_path in ["logs", "error_logs", "error_log"]:
+    if clean_path in ["logs", "error_logs", "error_log", "recent_logs", "application_logs"]:
         return execution_state.get("error_log") or execution_state.get("step_1", {}).get("raw", "")
-    if clean_path in ["rca_findings", "rca_summary", "rca"]:
+    if clean_path in ["rca_findings", "rca_summary", "rca", "ai_rca", "rca_markdown", "rca_report"]:
         rca = execution_state.get("rca")
         if isinstance(rca, dict):
-            return rca.get("root_cause") or rca.get("formatted_rca_markdown") or rca.get("incident_title")
+            return rca.get("formatted_rca_markdown") or rca.get("root_cause") or rca.get("incident_title")
         return execution_state.get("rca_findings")
-    if clean_path in ["pipeline_code", "source_code"]:
-        return execution_state.get("step_4", {}).get("raw") or execution_state.get("step_3", {}).get("raw") or ""
+    if clean_path in ["pipeline_code", "source_code", "code_snippet"]:
+        return execution_state.get("step_5", {}).get("raw") or execution_state.get("step_4", {}).get("raw") or execution_state.get("step_3", {}).get("raw") or ""
 
     parts = clean_path.split('.', 1)
     root_key = parts[0]
@@ -1006,25 +1006,30 @@ def generate_terminal_stream_lines(
             status_emoji = "✅"
         elif "probe" in s_name.lower() or "log" in s_name.lower():
             status_emoji = "📡"
+        elif "deduplicat" in s_det.lower():
+            status_emoji = "🛡️"
 
         lines.append(f"[{t_str}] ─── STEP {s_num}/{len(steps_log)}: {s_name} ───")
         lines.append(f"[{t_str}] {status_emoji} [EXEC] {s_det[:160]}")
 
-        # Check corresponding step output for errors or RCA findings
         out_match = next((o for o in step_outputs if o.get("step") == s_num), None)
         if out_match:
             raw_out = (out_match.get("output") or "").strip()
-            if "Value too long" in raw_out or "ERROR" in raw_out or "Exception" in raw_out:
-                first_err_line = next((l.strip() for l in raw_out.splitlines() if "ERROR" in l or "Exception" in l or "Value too long" in l), "")
-                if first_err_line:
+            srv = out_match.get("server", "")
+            tool = out_match.get("tool", "")
+
+            if srv == "azure_app_service" and ("Value too long" in raw_out or "ERROR" in raw_out or "Exception" in raw_out):
+                err_block = extract_stripped_error_log(raw_out)
+                if err_block:
+                    first_err_line = err_block.splitlines()[0]
                     lines.append(f"[{t_str}] 🚨 [DETECTED] {first_err_line[:140]}")
-            elif "rca" in s_name.lower() or out_match.get("tool") == "generate_ai_rca":
-                lines.append(f"[{t_str}] 💡 [RCA_SUMMARY] Root cause diagnosed: Schema column length constraint violation.")
-            elif "create_incident" in str(out_match.get("tool")) or "query_incidents" in str(out_match.get("tool")):
+            elif "rca" in s_name.lower() or tool == "generate_ai_rca":
+                lines.append(f"[{t_str}] 💡 [AI_RCA] In-depth root cause analysis synthesized via Mistral AI.")
+            elif "create_incident" in str(tool) or "query_incidents" in str(tool):
                 if "INC" in raw_out:
                     inc_match = re.search(r'\b(INC\d+)\b', raw_out)
                     if inc_match:
-                        lines.append(f"[{t_str}] 🎫 [SNOW_TICKET] Incident reference: {inc_match.group(1)} [HTTP 200/201]")
+                        lines.append(f"[{t_str}] 🎫 [SNOW_TICKET] Incident reference: {inc_match.group(1)} [Active/Synced]")
 
     lines.append(f"[{t_str}] " + "─" * 68)
     verdict = "HEALTHY (Nominal)" if status == "healthy" else ("INCIDENT_PROCESSED & RESOLVED" if status == "incident_created" or status == "incident_resolved" else status.upper())
@@ -1052,7 +1057,7 @@ def generate_dynamic_execution_report(
     steps_table_rows = []
     for s in steps_log:
         st = s.get("status", "success")
-        badge = "🟢 Success" if st == "success" else ("🟡 Warning" if st == "warning" else "🔴 Alert")
+        badge = "🟢 Success" if st == "success" else ("🟡 Warning" if st == "warning" else ("🛡️ Deduplicated" if "deduplicat" in s.get("details", "").lower() else "🔴 Alert"))
         step_name = s.get("name", "Action")
         details = s.get("details", "")[:120].replace("\n", " ")
         steps_table_rows.append(f"| **Step {s.get('step', '-')}** | {step_name} | {badge} | {details} |")
@@ -1071,7 +1076,24 @@ def generate_dynamic_execution_report(
 {chr(10).join(ctx_rows)}
 """
 
-    # 3. Dynamic Tool Output & Telemetry Highlights
+    # 3. Dedicated AI RCA Section (Mistral AI Root Cause & Remediation)
+    rca_markdown = ""
+    for out in step_outputs:
+        if out.get("tool") == "generate_ai_rca" or "rca" in str(out.get("action", "")).lower():
+            rca_markdown = out.get("output", "")
+            if rca_markdown and len(rca_markdown) > 30:
+                break
+
+    rca_section = ""
+    if rca_markdown:
+        rca_section = f"""
+---
+
+#### 🧠 Autonomous AI Root Cause Analysis (RCA) & Remediation Plan
+{rca_markdown}
+"""
+
+    # 4. Dynamic Tool Output & Telemetry Highlights
     findings_blocks = []
     for out in step_outputs:
         srv = out.get("server", "")
@@ -1080,6 +1102,8 @@ def generate_dynamic_execution_report(
         raw = (out.get("output") or "").strip()
         if not raw:
             continue
+        if tool == "generate_ai_rca" or (srv == "built_in" and "rca" in tool):
+            continue  # Already rendered prominently in RCA Section
 
         clean_highlight = raw
         if len(clean_highlight) > 1200:
@@ -1093,7 +1117,7 @@ def generate_dynamic_execution_report(
 
     findings_section = "\n".join(findings_blocks) if findings_blocks else "All telemetry verified within nominal parameters."
 
-    # 4. Status Verdict
+    # 5. Status Verdict
     verdict_badge = "🟢 **OPERATIONAL / HEALTHY**" if status == "healthy" else ("🟡 **ATTENTION REQUIRED**" if status == "warning" else "🔴 **ACTION REQUIRED / ANOMALY DETECTED**")
 
     report = f"""### 📊 Autonomous Execution Dashboard: {bot_name}
@@ -1112,6 +1136,7 @@ def generate_dynamic_execution_report(
 | :--- | :--- | :--- | :--- |
 {steps_table}
 {context_section}
+{rca_section}
 ---
 
 #### 🔍 Live Telemetry & Observability Findings
@@ -1308,25 +1333,29 @@ def _execute_deterministic_agent_fallback(
             overall_status = "incident_created"
             logger.info(f"🚨 Fallback Engine: Detected runtime anomaly/error on App Service '{app_name}'")
 
-            # Step 3: Query ServiceNow for deduplication
+            # Step 3: Query ServiceNow for deduplication (active open incidents)
             existing_sys_id = None
             if any("servicenow" in s for s in tools_req):
-                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "active=true^short_descriptionLIKESpring Boot App Error"}, "ServiceNow Incident Deduplication Check")
+                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "active=true^stateIN1,2,3^ORDERBYDESCsys_created_on", "sysparm_limit": 5}, "ServiceNow Incident Deduplication Check")
                 active_incs = sn_query_data.get("result") or [] if isinstance(sn_query_data, dict) else []
-                matching_incs = [
-                    inc for inc in active_incs 
-                    if isinstance(inc, dict) and "Spring Boot App Error" in inc.get("short_description", "") and str(inc.get("active", "")).lower() == "true"
-                ]
-                if matching_incs:
-                    existing_sys_id = matching_incs[0].get("sys_id") or matching_incs[0].get("number")
-                    logger.info(f"🛡️ Deduplication: Active ticket {matching_incs[0].get('number')} found.")
+                if active_incs and isinstance(active_incs, list):
+                    matching_incs = [
+                        inc for inc in active_incs 
+                        if isinstance(inc, dict) and (
+                            str(inc.get("active", "")).lower() == "true" or inc.get("state") in ["1", "2", "3"]
+                        )
+                    ]
+                    if matching_incs:
+                        existing_sys_id = matching_incs[0].get("sys_id") or matching_incs[0].get("number")
+                        logger.info(f"🛡️ Deduplication: Active ticket {matching_incs[0].get('number')} found.")
 
-            # Step 4: Create Incident if not already existing
+            # Step 4: Create Incident ONLY if no active open incident exists
             incident_id = existing_sys_id
             if any("servicenow" in s for s in tools_req) and not existing_sys_id:
                 inc_args = {
-                    "short_description": "Spring Boot App Error",
-                    "description": f"Automated Alert: Runtime error detected on Azure App Service '{app_name}'. Error signature: {stripped_err[:200] if stripped_err else 'HTTP 500'}",
+                    "short_description": f"Spring Boot App Error - {app_name}",
+                    "description": f"Automated Alert: Runtime error detected on Azure App Service '{app_name}'. SRE AI investigating root cause.",
+                    "work_notes": f"🔍 [Initial Error Log Extract]\n{stripped_err[:1500] if stripped_err else 'HTTP 500 error'}",
                     "urgency": "2",
                     "impact": "2",
                     "category": "Software"
@@ -1336,6 +1365,8 @@ def _execute_deterministic_agent_fallback(
                 if isinstance(res_obj, list) and res_obj:
                     res_obj = res_obj[0]
                 incident_id = res_obj.get("sys_id") if isinstance(res_obj, dict) else None
+            elif existing_sys_id:
+                logger.info(f"🛡️ Deduplication: Skipping create_incident, reusing active ticket {existing_sys_id}")
 
             # Step 5: Add Initial Work Note
             if any("servicenow" in s for s in tools_req) and incident_id:
@@ -1634,6 +1665,9 @@ OPERATIONAL RULES:
             tool_calls = llm_response.get("tool_calls", [])
 
             if not tool_calls:
+                if turn == 1:
+                    logger.info(f"ReAct agent turn 1 conversational response received. Transitioning to full dynamic investigation & RCA flow...")
+                    return _execute_deterministic_agent_fallback(bot, trigger_reason, start_time, steps_log, step_outputs)
                 final_summary = content
                 step_record = {
                     "step": len(steps_log) + 1,
@@ -2058,6 +2092,91 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
 
             # 6. Invoke MCP Tool via Gateway
             if step_server and step_tool:
+                # ServiceNow Smart Deduplication & Field Normalization
+                if step_server == "servicenow":
+                    curr_sys_id = execution_state.get("incident", {}).get("sys_id") or execution_state.get("incident_sys_id")
+                    if curr_sys_id:
+                        if not step_args.get("sys_id") or step_args.get("sys_id") in ["{incident_sys_id}", "{sys_id}", ""] or str(step_args.get("sys_id", "")).startswith("{"):
+                            step_args["sys_id"] = curr_sys_id
+                        if not step_args.get("incident_id") or step_args.get("incident_id") in ["{incident_sys_id}", "{sys_id}", ""] or str(step_args.get("incident_id", "")).startswith("{"):
+                            step_args["incident_id"] = curr_sys_id
+
+                    # Automatic Deduplication Check before creating incident
+                    if step_tool == "create_incident":
+                        existing_inc = execution_state.get("incident")
+                        if not existing_inc or not isinstance(existing_inc, dict) or not existing_inc.get("sys_id"):
+                            target_app = ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("project") or bot_name
+                            sn_q_res = execute_mcp_tool_on_gateway("servicenow", "query_incidents", {
+                                "sysparm_query": "active=true^stateIN1,2,3^ORDERBYDESCsys_created_on",
+                                "sysparm_limit": 5
+                            })
+                            q_data = sn_q_res.get("data") or {}
+                            q_results = q_data.get("result") or [] if isinstance(q_data, dict) else []
+                            if q_results and isinstance(q_results, list):
+                                matching = [
+                                    inc for inc in q_results 
+                                    if isinstance(inc, dict) and (
+                                        str(inc.get("active", "")).lower() == "true" or inc.get("state") in ["1", "2", "3"]
+                                    )
+                                ]
+                                if matching:
+                                    existing_inc = matching[0]
+
+                        if existing_inc and isinstance(existing_inc, dict) and existing_inc.get("sys_id"):
+                            inc_num = existing_inc.get("number", "INC")
+                            inc_sys_id = existing_inc.get("sys_id")
+                            execution_state["incident"] = existing_inc
+                            execution_state["incident_sys_id"] = inc_sys_id
+                            execution_state["incident_number"] = inc_num
+                            execution_state["has_duplicate_incident"] = True
+                            overall_status = "incident_created"
+
+                            step_record["status"] = "success"
+                            step_record["details"] = f"🛡️ Deduplicated: Active open incident {inc_num} already exists in ServiceNow ({inc_sys_id}). Reusing ticket without creating duplicate."
+                            step_record["mcp_output"] = f"Active ServiceNow Incident Reused: {inc_num} (sys_id: {inc_sys_id})"
+
+                            step_outputs.append({
+                                "step": step_num,
+                                "action": step_action,
+                                "server": step_server,
+                                "tool": step_tool,
+                                "success": True,
+                                "output": f"Active incident reused: {inc_num} [Deduplicated: No new ticket created]"
+                            })
+                            continue
+                        else:
+                            # Sanitize fields for new ticket creation
+                            raw_desc = str(step_args.get("description", ""))
+                            app_target = ctx.get("app_service_name") or ctx.get("app_name") or bot_name
+                            if len(raw_desc) > 300 or "Exception" in raw_desc or "ERROR" in raw_desc:
+                                step_args["description"] = f"Automated Alert: Runtime error detected on '{app_target}'. SRE AI investigating root cause."
+                                if "work_notes" not in step_args:
+                                    step_args["work_notes"] = f"🔍 [Initial Error Log Extract]\n{raw_desc[:1500]}"
+                            if not step_args.get("short_description"):
+                                step_args["short_description"] = f"Spring Boot App Error - {app_target}"
+
+                    elif step_tool == "resolve_incident":
+                        step_args["state"] = "6"
+                        step_args["incident_state"] = "6"
+                        if "resolution_code" in step_args and "close_code" not in step_args:
+                            step_args["close_code"] = step_args.pop("resolution_code")
+                        if "resolution_notes" in step_args and "close_notes" not in step_args:
+                            step_args["close_notes"] = step_args.pop("resolution_notes")
+                        if not step_args.get("close_code") or step_args.get("close_code") in ["successful", "Solved (Permanently)"]:
+                            step_args["close_code"] = "Solution provided"
+                        if not step_args.get("close_notes"):
+                            rca_obj = execution_state.get("rca", {})
+                            step_args["close_notes"] = rca_obj.get("root_cause") or "Resolved by Autonomous SRE AI."
+
+                    elif step_tool == "add_work_note":
+                        if "work_note" in step_args and "work_notes" not in step_args:
+                            step_args["work_notes"] = step_args.pop("work_note")
+                        # If work_notes is empty or has placeholder, inject RCA markdown
+                        if not step_args.get("work_notes") or step_args.get("work_notes") in ["{rca_findings}", "{rca}", ""]:
+                            rca_md = execution_state.get("rca", {}).get("formatted_rca_markdown") or execution_state.get("rca_findings", "")
+                            if rca_md:
+                                step_args["work_notes"] = f"🔍 [SRE AI Root Cause Analysis (RCA)]\n\n{rca_md}"
+
                 if step_server == "azure_devops" and step_tool == "list_builds":
                     pipe_val = str(step_args.get("pipeline") or step_args.get("pipeline_name") or step_args.get("definition") or "").strip()
                     if pipe_val and "definitions" not in step_args:
@@ -2127,6 +2246,8 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     if len(inc_list) > 0:
                         existing_inc = inc_list[0]
                         execution_state["incident"] = existing_inc
+                        execution_state["incident_sys_id"] = existing_inc.get("sys_id")
+                        execution_state["incident_number"] = existing_inc.get("number")
                         execution_state["has_duplicate_incident"] = True
                         step_record["details"] = f"Found {len(inc_list)} active incident(s) in ServiceNow ({existing_inc.get('number', 'INC')}). Deduplication active."
                         logger.info(f"🛡️ Active incident already exists: {existing_inc.get('number')}")
@@ -2136,6 +2257,9 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     if isinstance(inc_obj, list) and inc_obj:
                         inc_obj = inc_obj[0]
                     execution_state["incident"] = inc_obj
+                    if isinstance(inc_obj, dict):
+                        execution_state["incident_sys_id"] = inc_obj.get("sys_id")
+                        execution_state["incident_number"] = inc_obj.get("number")
                     overall_status = "incident_created"
 
                 step_outputs.append({
