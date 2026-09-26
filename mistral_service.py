@@ -550,12 +550,14 @@ def clean_llm_synth_response(text: str) -> str:
         return ""
     cleaned = text.strip()
     patterns = [
-        r"^(?:Here(?:\'s| is| are)|Below is|Sure!? Here is|Certainly,?(?: here is)?)[^\n]*:\s*",
+        r"^(?:Here[\'’]?(?:s| is| are)?|Below is|Sure!? Here is|Certainly,?(?: here is)?)[^\n]*:\s*",
         r"^---\s*",
+        r"^\*\*(?:Response|Answer|Output|Result):\*\*\s*"
     ]
-    for _ in range(4):
+    for _ in range(5):
         for pat in patterns:
             cleaned = re.sub(pat, "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\s*\*\([^*]+\)\*\s*$", "", cleaned, flags=re.IGNORECASE).strip()
     cleaned = re.sub(r"\s*---\s*$", "", cleaned).strip()
     return cleaned
 
@@ -1093,14 +1095,18 @@ def chat_with_mcp_agent(
                     else:
                         result_content = json.dumps(gw_data)
 
-                synth_prompt = f"""You are presenting the output of an MCP tool execution to the user.
+                synth_prompt = f"""You are presenting the output of an MCP tool execution directly to the user.
 User Request: "{user_message}"
 Executed Tool: {target_server}.{target_tool} with arguments: {json.dumps(tool_args)}
 Raw Tool Output:
 {result_content[:4000]}
 
 Format this into a clean, concise, beautiful Markdown response (use tables, bullet points, or status badges where appropriate).
-Explain the result directly to the user. DO NOT dump raw JSON."""
+CRITICAL RULES:
+- Output ONLY the direct Markdown response for the user.
+- DO NOT start with any greeting or meta-preamble (e.g., NEVER say "Here is a clean response...", "Below is the output", etc.).
+- DO NOT add trailing meta-commentary (e.g., "(Formatted for readability...)").
+- DO NOT dump raw JSON."""
 
                 try:
                     synth_res = llm_client.chat_completion(
