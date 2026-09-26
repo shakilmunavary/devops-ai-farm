@@ -2628,6 +2628,7 @@
                 <button class="btn-send" id="agent-send-btn" onclick="sendAgentChatMessage()">Send</button>
             </div>
         </div>
+    </div>
 
     <!-- Catalog Details Modal Popup -->
     <div class="modal-backdrop" id="modal-catalog-details">
@@ -5473,6 +5474,13 @@
             if (modal) modal.classList.remove('active');
             activeViewingBotId = null;
             activeBotLogsData = null;
+        }
+
+        function toggleRawOutput(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = el.style.display === 'none' ? 'block' : 'none';
+            }
         }
 
         // ==============================================================================
