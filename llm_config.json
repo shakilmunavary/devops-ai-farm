@@ -1,0 +1,8 @@
+{
+  "provider": "mistral",
+  "endpoint": "https://api.mistral.ai/v1/chat/completions",
+  "model": "mistral-large-latest",
+  "temperature": 0.2,
+  "max_tokens": 4096,
+  "timeout_seconds": 60
+}
