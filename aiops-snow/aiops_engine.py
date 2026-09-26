@@ -500,11 +500,17 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             or ""
         ).strip()
 
-        rg_name = (
+        DEFAULT_RG = "RG-DEVOPS-UAENORTH"
+        rg_raw = (
             variables.get("resource_group")
             or variables.get("rg")
-            or "RG-DEVOPS-UAENORTH"
+            or ""
         ).strip()
+
+        if not rg_raw or rg_raw.lower() in ["resource_group", "rg", "resourcegroup", "default", "none", "n/a"]:
+            rg_name = DEFAULT_RG
+        else:
+            rg_name = rg_raw
 
         cat_lower = cat_name.lower()
 
@@ -516,6 +522,11 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
             
             # Step 2: Check App Service Status (Pre-Flight)
             pre_view = get_azure_app_service_status(target_app, rg_name)
+            if not pre_view.get("success") and rg_name != DEFAULT_RG:
+                fallback_view = get_azure_app_service_status(target_app, DEFAULT_RG)
+                if fallback_view.get("success"):
+                    pre_view = fallback_view
+                    rg_name = DEFAULT_RG
             if not pre_view.get("success"):
                 err_msg = pre_view.get("error", "App Service not found")
                 snow_update("sc_req_item", ritm_sys_id, {
@@ -601,6 +612,13 @@ def execute_order_with_mistral(ritm_sys_id: str, order_number: Optional[str] = N
 
             # Step 2: Check VM Current Status (Pre-Flight)
             pre_view = get_azure_vm_instance_view(target_vm, rg_name)
+            if not pre_view.get("success") and rg_name != DEFAULT_RG:
+                log.info(f"VM '{target_vm}' not found in '{rg_name}', trying fallback '{DEFAULT_RG}'...")
+                fallback_view = get_azure_vm_instance_view(target_vm, DEFAULT_RG)
+                if fallback_view.get("success"):
+                    pre_view = fallback_view
+                    rg_name = DEFAULT_RG
+
             if not pre_view.get("success"):
                 err_msg = pre_view.get("error", "VM not found")
                 snow_update("sc_req_item", ritm_sys_id, {
