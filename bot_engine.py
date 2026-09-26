@@ -404,7 +404,7 @@ def extract_stripped_error_log(raw_logs: str) -> Optional[str]:
         r'\bERROR\b', r'\bFATAL\b', r'\bException\b', r'\bSqlExceptionHelper\b',
         r'DataIntegrityViolationException', r'JdbcSQLDataException',
         r'NullPointerException', r'TimeoutException', r'SQL Error:', r'Caused by:',
-        r'Request processing failed', r'Servlet\.service\(\)'
+        r'Request processing failed', r'Servlet\.service\(\)', r'SQL statement:'
     ]
 
     for idx, line in enumerate(lines):
@@ -414,30 +414,22 @@ def extract_stripped_error_log(raw_logs: str) -> Optional[str]:
     if not error_indices:
         return None
 
-    # Focus around the primary error clusters (take 6 lines context before first error to 40 lines after)
-    first_err = max(0, error_indices[0] - 6)
-    last_err = min(len(lines), error_indices[-1] + 35)
+    # Focus around the latest error cluster (take context before and after the last error)
+    last_error_idx = error_indices[-1]
+    first_err = max(0, last_error_idx - 5)
+    last_err = min(len(lines), last_error_idx + 25)
 
     extracted_chunk = lines[first_err:last_err]
     if len(extracted_chunk) > 75:
         extracted_chunk = extracted_chunk[:75]
 
     error_text = "\n".join(extracted_chunk).strip()
-
-    # Stateful fingerprinting: Check if this exact error was already ticketed and resolved
-    err_hash = hashlib.sha256(error_text.encode("utf-8")).hexdigest()
-    if err_hash in _PROCESSED_ERROR_HASHES:
-        logger.info(f"ℹ️ Error hash {err_hash[:8]} was already processed and resolved. Skipping redundant incident creation.")
-        return None
-
     return error_text
 
 
 def mark_error_processed(error_text: str):
-    """Marks an error text as processed so it is never re-ticketed."""
-    if error_text:
-        err_hash = hashlib.sha256(error_text.encode("utf-8")).hexdigest()
-        _PROCESSED_ERROR_HASHES.add(err_hash)
+    """Marks an error text as processed."""
+    pass
 
 
 def fetch_azure_appservice_logs(app_name: str) -> str:
@@ -496,18 +488,18 @@ def fetch_azure_appservice_logs(app_name: str) -> str:
                     if v_res.status_code == 200:
                         for item in v_res.json():
                             fname = item.get("name", "")
-                            if (fname.endswith(".log") or fname.endswith(".txt")) and item.get("size", 0) > 0:
+                            if fname.endswith(".log") or fname.endswith(".txt") or "docker" in fname.lower():
                                 log_data = client.get(f"{vfs_root_url}{fname}", auth=(user, pwd), timeout=6.0).text
                                 if log_data:
                                     collected_logs.append(log_data[-50000:])
                                     
-                    # B. Scan /api/vfs/LogFiles/Application/
+                    # B. Scan /api/vfs/LogFiles/Application/ (Spring Boot Active Log Files)
                     vfs_app_url = f"https://{app_name}.scm.azurewebsites.net/api/vfs/LogFiles/Application/"
                     va_res = client.get(vfs_app_url, auth=(user, pwd), timeout=6.0)
                     if va_res.status_code == 200:
                         for item in va_res.json():
                             fname = item.get("name", "")
-                            if (fname.endswith(".log") or fname.endswith(".txt")) and item.get("size", 0) > 0:
+                            if fname.endswith(".log") or fname.endswith(".txt") or "spring" in fname.lower():
                                 log_data = client.get(f"{vfs_app_url}{fname}", auth=(user, pwd), timeout=6.0).text
                                 if log_data:
                                     collected_logs.append(log_data[-50000:])
