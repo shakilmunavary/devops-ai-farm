@@ -5094,8 +5094,9 @@
                     if (firstErr) {
                         lines.push(`[${tStr}] 🚨 [DETECTED] ${firstErr.trim().substring(0, 140)}`);
                     }
-                } else if (sName.toLowerCase().includes('rca')) {
-                    lines.push(`[${tStr}] 💡 [RCA_SUMMARY] Root cause diagnosed: Database schema column length constraint mismatch.`);
+                } else if (sName.toLowerCase().includes('rca') && sStatus !== 'skipped') {
+                    const rcaSummary = (run.rca && run.rca.root_cause) ? run.rca.root_cause : 'Telemetry and error log analysis completed.';
+                    lines.push(`[${tStr}] 💡 [RCA_SUMMARY] Root cause diagnosed: ${rcaSummary}`);
                 } else if (sOut.includes('INC') || sOut.includes('sys_id')) {
                     const incMatch = sOut.match(/\b(INC\d+)\b/);
                     if (incMatch) {

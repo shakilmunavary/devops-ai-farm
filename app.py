@@ -677,6 +677,28 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         }}
         query_params = {{"api-version": "7.1-preview.4"}}
     
+    # Live Container & Docker Log Retrieval for Azure App Service
+    if "{fn_name}" == "get_app_service_logs" and app_val and sub_val and rg_val:
+        try:
+            pub_url = f"https://management.azure.com/subscriptions/{{sub_val}}/resourceGroups/{{rg_val}}/providers/Microsoft.Web/sites/{{app_val}}/config/publishingcredentials/list?api-version=2022-03-01"
+            with httpx.Client(verify=False, headers=headers, timeout=12.0) as k_client:
+                pub_res = k_client.post(pub_url)
+                if pub_res.status_code == 200:
+                    pub_props = pub_res.json().get("properties", {{}})
+                    k_user = pub_props.get("publishingUserName")
+                    k_pwd = pub_props.get("publishingPassword")
+                    dock_url = f"https://{{app_val}}.scm.azurewebsites.net/api/logs/docker"
+                    dock_res = k_client.get(dock_url, auth=(k_user, k_pwd))
+                    if dock_res.status_code == 200 and isinstance(dock_res.json(), list) and len(dock_res.json()) > 0:
+                        href = dock_res.json()[0].get("href")
+                        if href:
+                            log_res = k_client.get(href, auth=(k_user, k_pwd))
+                            if log_res.status_code == 200 and log_res.text:
+                                tail = log_res.text[-2500:]
+                                return f"**get_app_service_logs (200 OK - Live Container Logs):**\\n```log\\n{{tail}}\\n```"
+        except Exception:
+            pass
+
     try:
         with httpx.Client(verify=False, auth=auth, headers=headers, timeout=25.0, follow_redirects=True) as client:
             if "{method}" == "GET":

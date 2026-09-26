@@ -1929,7 +1929,7 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
             "bot_name": bot_name,
             "bot_id": bot_id,
             "has_failure": False,
-            "pipeline_healthy": True,
+            "pipeline_healthy": False,
             "rca": {},
             "incident": {}
         }
@@ -1962,14 +1962,14 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     steps_log.append(step_record)
                     continue
 
-            # 2. Pipeline Health Gate: If pipeline is healthy, skip error/RCA/file inspection/incident creation steps
-            is_error_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["error", "rca", "incident", "create_incident", "add_work_note", "get_build_logs", "get_file_content", "inspect"])
-            if execution_state.get("pipeline_healthy") and is_error_step and not execution_state.get("has_failure") and step_tool != "query_incidents":
+            # 2. Health Gate: Only skip remediation steps if telemetry is explicitly healthy and NO failures were detected
+            is_remediation_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["create_incident", "add_work_note", "update_incident", "close_incident", "generate_ai_rca", "perform_rca"])
+            if execution_state.get("pipeline_healthy") and not execution_state.get("has_failure") and is_remediation_step and step_tool != "query_incidents":
                 step_record = {
                     "step": step_num,
                     "name": f"{step_action} ({step_server}.{step_tool})" if step_server and step_tool else step_action,
                     "status": "skipped",
-                    "details": "Skipped: Pipeline build is healthy & operational (succeeded). No error logs, code inspection, RCA, or incident creation required."
+                    "details": "Skipped: Target telemetry is healthy (nominal). No errors or exceptions detected."
                 }
                 steps_log.append(step_record)
                 continue
@@ -1985,9 +1985,32 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
             }
             steps_log.append(step_record)
 
-            # 4. Handle Built-in AI RCA Tools
-            if step_server in ["built_in", "ai", "mistral", "local"] or step_tool in ["generate_ai_rca", "ai_rca", "perform_rca"]:
-                err_text = step_args.get("error_log") or execution_state.get("error_log") or f"Build failure in {bot_name}"
+            # 4. Handle Condition Check Steps
+            if step_server in ["local", "system"] or step_tool in ["check_condition", "check_health"]:
+                has_err = execution_state.get("has_failure", False)
+                if has_err:
+                    step_record["status"] = "alert"
+                    step_record["details"] = "Application error / exception detected in logs. Triggering incident creation and RCA."
+                    step_record["mcp_output"] = execution_state.get("error_log", "Errors detected in target telemetry.")
+                else:
+                    execution_state["pipeline_healthy"] = True
+                    step_record["status"] = "success"
+                    step_record["details"] = "Target system telemetry verified nominal. No active application errors detected."
+                    step_record["mcp_output"] = "System nominal."
+
+                step_outputs.append({
+                    "step": step_num,
+                    "action": step_action,
+                    "server": step_server,
+                    "tool": step_tool,
+                    "success": True,
+                    "output": step_record["details"]
+                })
+                continue
+
+            # 5. Handle Built-in AI RCA Tools
+            if step_server in ["built_in", "ai", "mistral"] or step_tool in ["generate_ai_rca", "ai_rca", "perform_rca"]:
+                err_text = step_args.get("error_log") or execution_state.get("error_log") or f"Issue in {bot_name}"
                 src_code = step_args.get("source_code") or ""
                 rca_data = generate_ai_rca(str(err_text), bot_name, app_context=str(src_code))
                 execution_state[f"step_{step_num}"] = {"output": {"rca": rca_data.get("formatted_rca_markdown"), "title": rca_data.get("incident_title"), "data": rca_data}}
@@ -2007,7 +2030,7 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                 })
                 continue
 
-            # 5. Invoke MCP Tool via Gateway
+            # 6. Invoke MCP Tool via Gateway
             if step_server and step_tool:
                 if step_server == "azure_devops" and step_tool == "list_builds":
                     pipe_val = str(step_args.get("pipeline") or step_args.get("pipeline_name") or step_args.get("definition") or "").strip()
@@ -2039,6 +2062,16 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     "raw": raw_out,
                     "success": is_success
                 }
+
+                # Check for runtime errors in tool output
+                raw_lower = raw_out.lower()
+                err_indicators = ["error", "exception", "500", "502", "503", "fatal", "failed", "crash", "traceback", "value too long", "sqlexception", "nullpointerexception", "terminated", "stopped"]
+                if any(ind in raw_lower for ind in err_indicators) and step_tool not in ["query_incidents", "list_incidents"]:
+                    execution_state["has_failure"] = True
+                    execution_state["pipeline_healthy"] = False
+                    execution_state["error_log"] = raw_out
+                    overall_status = "incident_created"
+                    logger.info(f"🚨 Detected error in step {step_num} ({step_server}.{step_tool})")
 
                 if step_tool == "list_builds" and isinstance(parsed_data, dict):
                     builds_list = parsed_data.get("value") or parsed_data.get("builds") or []
