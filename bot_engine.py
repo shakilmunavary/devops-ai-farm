@@ -1313,6 +1313,27 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
 
             # 5. Invoke MCP Tool via Gateway
             if step_server and step_tool:
+                # Resolve Azure DevOps pipeline name to definitions ID if specified
+                if step_server == "azure_devops" and step_tool == "list_builds":
+                    pipe_val = str(step_args.get("pipeline") or step_args.get("pipeline_name") or step_args.get("definition") or "").strip()
+                    if pipe_val and "definitions" not in step_args:
+                        pipe_map = {
+                            "springboot-app - app ci-cd": "4",
+                            "springboot-app": "4",
+                            "mcp-ai-portal - app ci-cd": "7",
+                            "mcp-ai-portal": "7",
+                            "ai-poc-ci-cd": "1",
+                            "ai-poc": "1",
+                            "springboot-app - infra deploy": "2",
+                            "springboot-app - infra destroy": "3",
+                            "mcp-ai-portal - infra deploy": "5",
+                            "mcp-ai-portal - infra destroy": "6"
+                        }
+                        if pipe_val.isdigit():
+                            step_args["definitions"] = pipe_val
+                        elif pipe_val.lower() in pipe_map:
+                            step_args["definitions"] = pipe_map[pipe_val.lower()]
+
                 tool_res = execute_mcp_tool_on_gateway(step_server, step_tool, step_args)
                 raw_out = tool_res.get("output", "")
                 is_success = tool_res.get("success", False)
