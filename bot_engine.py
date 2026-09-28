@@ -112,15 +112,20 @@ Workflow Execution Steps:
                 "instructions": scrum_prompt,
                 "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
                 "context_config": {
+                    "subscription_id": "60e3a39b-c3bc-4a0e-935e-f3ef0daceb93",
+                    "azure_subscription_id": "60e3a39b-c3bc-4a0e-935e-f3ef0daceb93",
                     "app_service_name": "devops-vsp-sample-app-shakil",
                     "resource_group": "rg-devops-uaenorth",
+                    "azure_resource_group": "rg-devops-uaenorth",
                     "ado_organization": "shakilaipoc",
                     "project": "AI-POC",
                     "repository": "springboot-app",
+                    "repo": "springboot-app",
                     "pipeline": "springboot-app - app ci-cd",
                     "ado_pipeline_definition_id": 4,
                     "branch": "main",
                     "servicenow_instance": "dev392242",
+                    "controller_path": "src/main/java/com/devops/sample/controller/AppController.java",
                     "time_window_hours": 24
                 }
             },
@@ -134,12 +139,18 @@ Workflow Execution Steps:
                 "instructions": app_rca_prompt,
                 "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
                 "context_config": {
+                    "subscription_id": "60e3a39b-c3bc-4a0e-935e-f3ef0daceb93",
+                    "azure_subscription_id": "60e3a39b-c3bc-4a0e-935e-f3ef0daceb93",
                     "app_service_name": "devops-vsp-sample-app-shakil",
                     "resource_group": "rg-devops-uaenorth",
+                    "azure_resource_group": "rg-devops-uaenorth",
+                    "ado_organization": "shakilaipoc",
                     "project": "AI-POC",
+                    "repository": "springboot-app",
                     "repo": "springboot-app",
                     "branch": "main",
-                    "servicenow_instance": "dev392242"
+                    "servicenow_instance": "dev392242",
+                    "controller_path": "src/main/java/com/devops/sample/controller/AppController.java"
                 }
             }
         ]
@@ -1962,10 +1973,43 @@ OPERATIONAL RULES:
                 srv_id = parts[0]
                 tool_name = parts[1] if len(parts) > 1 else func_name
 
-                # Auto-inject context if missing
-                if srv_id == "azure_devops":
-                    if "project" not in args and ctx.get("project"):
+                # Auto-inject and sanitize context
+                if srv_id in ["azure_app_service", "azure_virtual_machines"]:
+                    sub_arg = str(args.get("subscription_id") or args.get("subscriptionId") or args.get("subscription") or "").strip()
+                    if not sub_arg or any(d in sub_arg.lower() for d in ["12345678", "your-", "default", "<sub", "subscription", "undefined", "null"]):
+                        real_sub = ctx.get("azure_subscription_id") or ctx.get("subscription_id") or os.environ.get("AZURE_SUBSCRIPTION_ID", "60e3a39b-c3bc-4a0e-935e-f3ef0daceb93")
+                        args["subscription_id"] = real_sub
+                        args["subscriptionId"] = real_sub
+
+                    rg_arg = str(args.get("resource_group") or args.get("resourceGroupName") or "").strip()
+                    if not rg_arg or any(d in rg_arg.lower() for d in ["your-", "default", "<rg", "resource_group", "undefined", "null"]):
+                        real_rg = ctx.get("azure_resource_group") or ctx.get("resource_group") or os.environ.get("AZURE_RESOURCE_GROUP", "rg-devops-uaenorth")
+                        args["resource_group"] = real_rg
+                        args["resourceGroupName"] = real_rg
+
+                    name_arg = str(args.get("name") or args.get("app_service_name") or args.get("appName") or "").strip()
+                    if not name_arg or any(d in name_arg.lower() for d in ["your-", "default", "<app", "app_service", "undefined", "null"]):
+                        real_app = ctx.get("app_service_name") or ctx.get("appName") or "devops-vsp-sample-app-shakil"
+                        args["name"] = real_app
+                        args["app_service_name"] = real_app
+
+                elif srv_id == "azure_devops":
+                    if not args.get("project") and ctx.get("project"):
                         args["project"] = ctx["project"]
+                    if not args.get("organization") and (ctx.get("ado_organization") or ctx.get("organization")):
+                        args["organization"] = ctx.get("ado_organization") or ctx.get("organization") or "shakilaipoc"
+                    if not args.get("repositoryId") and not args.get("repository") and not args.get("repo"):
+                        args["repositoryId"] = ctx.get("repository") or ctx.get("repo") or "springboot-app"
+                        args["repository"] = ctx.get("repository") or ctx.get("repo") or "springboot-app"
+
+                    if tool_name == "get_file_content":
+                        req_path = str(args.get("path") or args.get("filePath") or args.get("file_path") or "").strip()
+                        if "AppController.java" in req_path and req_path != "src/main/java/com/devops/sample/controller/AppController.java":
+                            args["path"] = "src/main/java/com/devops/sample/controller/AppController.java"
+                        elif not req_path:
+                            args["path"] = "src/main/java/com/devops/sample/controller/AppController.java"
+                        args["includeContent"] = True
+
                     # Map pipeline name to definition ID
                     pipe_val = str(args.get("definitions") or args.get("pipeline") or ctx.get("pipeline") or "").strip()
                     if pipe_val:
@@ -1982,6 +2026,10 @@ OPERATIONAL RULES:
                         elif pipe_val.lower() in pipe_map:
                             args["definitions"] = pipe_map[pipe_val.lower()]
 
+                elif srv_id == "servicenow":
+                    if "sysparm_query" not in args and "query" in args:
+                        args["sysparm_query"] = args.pop("query")
+
                 step_record = {
                     "step": step_num,
                     "name": f"{srv_id}.{tool_name}",
@@ -1993,6 +2041,8 @@ OPERATIONAL RULES:
                 tool_res = execute_mcp_tool_on_gateway(srv_id, tool_name, args)
                 raw_out = tool_res.get("output", "")
                 is_success = tool_res.get("success", False)
+                if any(err_sig in raw_out for err_sig in ["SubscriptionNotFound", "TF401174", "(404)", "(500)", "AuthorizationFailed"]):
+                    is_success = False
                 parsed_data = tool_res.get("data") or parse_output_as_data(raw_out, tool_res.get("raw"))
 
                 if is_success:
