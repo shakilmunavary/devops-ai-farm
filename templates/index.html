@@ -1936,7 +1936,519 @@
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
+    
+        /* ==========================================================================
+           ANTIGRAVITY 3-PANE WORKSPACE STYLES (DevOps Agent Farm)
+           ========================================================================== */
+        .ag-workspace-container {
+            display: flex;
+            flex-direction: row;
+            width: 100vw;
+            height: calc(100vh - 65px);
+            background-color: var(--bg-base);
+            overflow: hidden;
+        }
+
+        /* Pane 1: Left Rail (Bot Farm & Sessions) */
+        .ag-pane-left {
+            width: 320px;
+            min-width: 290px;
+            max-width: 340px;
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        .ag-pane-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.6);
+        }
+
+        .ag-pane-title {
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ag-count-pill {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .ag-btn-new-bot {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+        }
+        .ag-btn-new-bot:hover { background: #1d4ed8; transform: translateY(-1px); }
+
+        .ag-bots-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .ag-bot-card {
+            background: var(--bg-base);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .ag-bot-card:hover {
+            border-color: var(--border-hover);
+            background: rgba(30, 41, 59, 0.4);
+        }
+        .ag-bot-card.active {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.08);
+            box-shadow: 0 0 0 1px #3b82f6;
+        }
+
+        .ag-bot-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .ag-bot-name {
+            font-size: 13.5px;
+            font-weight: 750;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ag-bot-card-actions {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .ag-mini-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            color: #cbd5e1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s;
+        }
+        .ag-mini-btn:hover { background: rgba(59, 130, 246, 0.2); color: #38bdf8; border-color: #38bdf8; }
+        .ag-mini-btn.run { color: #34d399; }
+        .ag-mini-btn.run:hover { background: rgba(16, 185, 129, 0.2); border-color: #10b981; }
+        .ag-mini-btn.danger { color: #f87171; }
+        .ag-mini-btn.danger:hover { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
+
+        /* Left Rail: Sessions / Runs Section */
+        .ag-sessions-section {
+            height: 240px;
+            background: rgba(11, 15, 25, 0.85);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .ag-sessions-header {
+            padding: 10px 14px;
+            background: rgba(15, 23, 42, 0.9);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #94a3b8;
+        }
+
+        .ag-sessions-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .ag-session-item {
+            padding: 8px 10px;
+            border-radius: 6px;
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 11.5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.15s;
+        }
+        .ag-session-item:hover {
+            background: var(--bg-elevated);
+            border-color: var(--border-hover);
+        }
+        .ag-session-item.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: #3b82f6;
+            color: #38bdf8;
+            font-weight: 700;
+        }
+
+        /* Pane 2: Middle Execution Trace & Terminal */
+        .ag-pane-middle {
+            flex: 1.25;
+            min-width: 480px;
+            background-color: var(--bg-base);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .ag-middle-header {
+            padding: 16px 22px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .ag-bot-headline {
+            flex: 1;
+        }
+
+        .ag-bot-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .ag-bot-title-row h2 {
+            font-size: 18px;
+            font-weight: 800;
+            color: #f8fafc;
+            margin: 0;
+        }
+
+        .ag-bot-desc {
+            font-size: 12.5px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .ag-target-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .ag-tag {
+            font-size: 11px;
+            padding: 3px 9px;
+            border-radius: 4px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .ag-action-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-run-once {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 750;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+        }
+        .btn-run-once:hover { background: #047857; transform: translateY(-1px); }
+        .btn-run-once:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .ag-loop-wrapper {
+            display: flex;
+            align-items: center;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .ag-loop-select {
+            background: transparent;
+            color: #cbd5e1;
+            border: none;
+            padding: 7px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .btn-loop-toggle {
+            background: rgba(245, 158, 11, 0.15);
+            border: none;
+            border-left: 1px solid var(--border-color);
+            color: #fbbf24;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-loop-toggle:hover { background: rgba(245, 158, 11, 0.3); }
+        .btn-loop-toggle.running { background: #ef4444; color: white; border-color: #dc2626; }
+
+        .ag-middle-tabs {
+            display: flex;
+            background: rgba(15, 23, 42, 0.7);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 16px;
+        }
+
+        .ag-tab-btn {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            padding: 10px 16px;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .ag-tab-btn:hover { color: #f8fafc; }
+        .ag-tab-btn.active {
+            color: #38bdf8;
+            border-bottom-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        /* Middle Terminal Box */
+        .ag-terminal-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #030712;
+            overflow: hidden;
+        }
+
+        .ag-terminal-topbar {
+            padding: 8px 16px;
+            background: #0b1120;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .ag-traffic-dots {
+            display: flex;
+            gap: 6px;
+        }
+        .ag-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .ag-terminal-screen {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 18px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.55;
+            color: #cbd5e1;
+        }
+
+        .ag-terminal-cli-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0b0f19;
+            padding: 8px 14px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .ag-cli-prompt {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: #10b981;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .ag-cli-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #f8fafc;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            outline: none;
+        }
+
+        /* Pane 3: Right Generated Artifacts & Reports */
+        .ag-pane-right {
+            flex: 1.15;
+            min-width: 420px;
+            background-color: var(--bg-surface);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .ag-artifact-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 8px 14px;
+            background: rgba(15, 23, 42, 0.6);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .ag-art-tab {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 650;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .ag-art-tab:hover { color: white; background: rgba(255, 255, 255, 0.05); }
+        .ag-art-tab.active {
+            background: var(--bg-elevated);
+            border-color: var(--border-color);
+            color: #38bdf8;
+        }
+
+        .ag-report-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 22px 26px;
+            font-size: 13px;
+            line-height: 1.65;
+            color: #e2e8f0;
+        }
+
+        .ag-report-content h1, .ag-report-content h2, .ag-report-content h3, .ag-report-content h4 {
+            color: #f8fafc;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            font-weight: 750;
+        }
+        .ag-report-content h3 { font-size: 16px; color: #38bdf8; }
+        .ag-report-content h4 { font-size: 14px; color: #cbd5e1; }
+
+        .ag-report-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            background: rgba(11, 15, 25, 0.6);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .ag-report-content th {
+            background: var(--bg-elevated);
+            color: #93c5fd;
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .ag-report-content td {
+            padding: 8px 12px;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .ag-report-content pre {
+            background: #030712;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 11.5px;
+            color: #38bdf8;
+            margin: 10px 0;
+        }
+        .ag-report-content code {
+            font-family: var(--font-mono);
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #67e8f9;
+        }
+        .ag-report-content blockquote {
+            border-left: 3px solid #3b82f6;
+            background: rgba(59, 130, 246, 0.08);
+            padding: 8px 14px;
+            margin: 10px 0;
+            border-radius: 0 6px 6px 0;
+        }
+
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 
@@ -1982,60 +2494,159 @@
 
     
     <!-- Autonomous Bots Dashboard View -->
-    <div id="bots-dashboard-view" class="bots-dashboard" style="display: none;">
-        <!-- Metrics Row -->
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-icon" style="background: rgba(59, 130, 246, 0.15); color: #38bdf8;">🤖</div>
-                <div>
-                    <div class="metric-val" id="metric-total-bots">1</div>
-                    <div class="metric-label">Autonomous Bots</div>
+    <!-- Antigravity-Style 3-Pane AI Bot Farm Workspace -->
+    <div id="bots-dashboard-view" class="ag-workspace-container" style="display: flex;">
+        <!-- PANE 1: Left Rail (Bot Farm & Sessions) -->
+        <div class="ag-pane-left">
+            <div class="ag-pane-header">
+                <div class="ag-pane-title">
+                    <span>🤖</span>
+                    <span>AI BOT FARM</span>
+                    <span class="ag-count-pill" id="ag-bots-count">0</span>
                 </div>
+                <button class="ag-btn-new-bot" onclick="openBotCreatorModal()">+ New Bot</button>
             </div>
-            <div class="metric-card">
-                <div class="metric-icon" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">🟢</div>
-                <div>
-                    <div class="metric-val" id="metric-active-bots">1</div>
-                    <div class="metric-label">Active Watchdogs</div>
+
+            <!-- Bot List -->
+            <div class="ag-bots-list" id="ag-bots-list">
+                <!-- Dynamically populated -->
+            </div>
+
+            <!-- Selected Bot Run Sessions -->
+            <div class="ag-sessions-section">
+                <div class="ag-sessions-header">
+                    <span>📜 EXECUTION SESSIONS</span>
+                    <span id="ag-sessions-count" style="font-size: 10.5px; color: var(--text-muted);">0 runs</span>
                 </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon" style="background: rgba(249, 115, 22, 0.15); color: #fb923c;">⚡</div>
-                <div>
-                    <div class="metric-val" id="metric-total-runs">0</div>
-                    <div class="metric-label">Executed Workflows</div>
-                </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">🎫</div>
-                <div>
-                    <div class="metric-val" id="metric-incidents">0</div>
-                    <div class="metric-label">SNOW Tickets Created</div>
+                <div class="ag-sessions-list" id="ag-sessions-list">
+                    <!-- Dynamically populated -->
                 </div>
             </div>
         </div>
 
-        <!-- Header Controls -->
-        <div class="bots-header-bar">
-            <div>
-                <h2 style="font-size: 20px; font-weight: 800; color: #f8fafc; margin-bottom: 4px;">DevOps Autonomous Bots</h2>
-                <p style="font-size: 13px; color: var(--text-muted);">AI-powered autonomous workflows monitoring containers, performing RCA, and orchestrating MCP tools.</p>
+        <!-- PANE 2: Middle Panel (Live Execution Trace & Terminal) -->
+        <div class="ag-pane-middle">
+            <!-- Header & Action Controls -->
+            <div class="ag-middle-header">
+                <div class="ag-bot-headline">
+                    <div class="ag-bot-title-row">
+                        <span class="pulse-dot" id="ag-bot-pulse-dot" style="background: #10b981; width: 9px; height: 9px; border-radius: 50%;"></span>
+                        <h2 id="ag-active-bot-title">DevOps Autonomous Bot</h2>
+                        <span class="badge badge-ok" id="ag-active-bot-badge" style="font-size: 10.5px;">STANDBY</span>
+                    </div>
+                    <p id="ag-active-bot-desc" class="ag-bot-desc">Select an agent to inspect execution traces and synthesized artifacts.</p>
+                    <div class="ag-target-tags" id="ag-target-tags">
+                        <!-- Dynamic Context Tags -->
+                    </div>
+                </div>
+
+                <div class="ag-action-controls">
+                    <button class="btn-run-once" id="ag-btn-run-once" onclick="agTriggerActiveBotRun()">
+                        <span>▶</span> Run Once
+                    </button>
+                    <div class="ag-loop-wrapper">
+                        <select id="ag-loop-interval-select" class="ag-loop-select">
+                            <option value="300">Every 5m</option>
+                            <option value="600" selected>Every 10m</option>
+                            <option value="900">Every 15m</option>
+                            <option value="1800">Every 30m</option>
+                            <option value="3600">Every 60m</option>
+                        </select>
+                        <button class="btn-loop-toggle" id="ag-btn-loop-toggle" onclick="agToggleActiveBotLoop()">
+                            ⚡ Start Loop
+                        </button>
+                    </div>
+                    <button class="ag-mini-btn danger" onclick="agClearActiveBotLogs()" title="Clear Logs" style="padding: 8px 10px;">
+                        🗑
+                    </button>
+                </div>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button class="btn-outline" onclick="loadBots()" style="display: flex; align-items: center; gap: 6px;">
-                    🔄 Refresh
+
+            <!-- Middle View Tabs -->
+            <div class="ag-middle-tabs">
+                <button class="ag-tab-btn active" id="ag-tab-terminal-btn" onclick="agSwitchMiddleTab('terminal')">
+                    🖥️ Execution Terminal & Trace
                 </button>
-                <button class="btn-add" onclick="openBotCreatorModal()" style="display: flex; align-items: center; gap: 6px;">
-                    ✨ + Create New AI Bot
+                <button class="ag-tab-btn" id="ag-tab-workflow-btn" onclick="agSwitchMiddleTab('workflow')">
+                    📋 Workflow DAG (<span id="ag-dag-step-count">0</span> steps)
                 </button>
+                <button class="ag-tab-btn" id="ag-tab-context-btn" onclick="agSwitchMiddleTab('context')">
+                    🎯 Target Context
+                </button>
+            </div>
+
+            <!-- Terminal Box -->
+            <div class="ag-terminal-box" id="ag-terminal-view">
+                <div class="ag-terminal-topbar">
+                    <div class="ag-traffic-dots">
+                        <span class="ag-dot" style="background: #ef4444;"></span>
+                        <span class="ag-dot" style="background: #f59e0b;"></span>
+                        <span class="ag-dot" style="background: #10b981;"></span>
+                    </div>
+                    <span class="ag-terminal-host" id="ag-terminal-host" style="font-family: var(--font-mono); font-size: 11px; color: #94a3b8;">agent@mcp-ai-portal: ~/bots</span>
+                    <div style="display: flex; align-items: center; gap: 10px; font-size: 11px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--text-muted);">
+                            <input type="checkbox" id="ag-autoscroll-chk" checked> Auto-scroll
+                        </label>
+                        <button class="ag-mini-btn" onclick="agCopyTerminalOutput()">📋 Copy</button>
+                    </div>
+                </div>
+
+                <div class="ag-terminal-screen" id="ag-terminal-screen">
+                    <!-- Monospace Streamed Lines -->
+                </div>
+
+                <div class="ag-terminal-cli-bar">
+                    <span class="ag-cli-prompt" id="ag-cli-prompt-label">agent@bot:~$</span>
+                    <input type="text" id="ag-cli-input" class="ag-cli-input" placeholder="Type 'run', 'status', 'clear', or custom instruction..." onkeydown="agHandleCliKey(event)">
+                    <button class="ag-mini-btn run" onclick="agExecuteCli()">Execute</button>
+                </div>
+            </div>
+
+            <!-- Workflow DAG View (Tab 2) -->
+            <div id="ag-workflow-view" style="display: none; flex: 1; overflow-y: auto; padding: 20px; background: var(--bg-base);">
+                <div id="ag-workflow-stepper-box" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+
+            <!-- Context View (Tab 3) -->
+            <div id="ag-context-view" style="display: none; flex: 1; overflow-y: auto; padding: 20px; background: var(--bg-base);">
+                <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+                    <thead>
+                        <tr style="background: var(--bg-elevated); color: #93c5fd;">
+                            <th style="padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border-color);">Parameter</th>
+                            <th style="padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border-color);">Configured Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ag-context-tbody"></tbody>
+                </table>
             </div>
         </div>
 
-        <!-- Grid of Bots -->
-        <div class="bots-grid" id="bots-grid-container">
-            <!-- Dynamic Bot Cards loaded via JavaScript -->
+        <!-- PANE 3: Right Panel (Generated Artifacts & Rich Reports) -->
+        <div class="ag-pane-right">
+            <div class="ag-pane-header">
+                <div class="ag-pane-title">
+                    <span>📊</span>
+                    <span>GENERATED ARTIFACTS & REPORTS</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="ag-mini-btn" onclick="agCopyReportMarkdown()" title="Copy Markdown">📋 Copy</button>
+                    <button class="ag-mini-btn" onclick="agDownloadReportMarkdown()" title="Download .md">⬇ Export</button>
+                </div>
+            </div>
+
+            <div class="ag-artifact-tabs">
+                <button class="ag-art-tab active" id="ag-art-tab-report" onclick="agSwitchArtifactTab('report')">Executive Report</button>
+                <button class="ag-art-tab" id="ag-art-tab-rca" style="display: none;" onclick="agSwitchArtifactTab('rca')">AI RCA</button>
+                <button class="ag-art-tab" id="ag-art-tab-snow" style="display: none;" onclick="agSwitchArtifactTab('snow')">ServiceNow Sync</button>
+            </div>
+
+            <div class="ag-report-content" id="ag-report-content">
+                <!-- Rendered Markdown Report -->
+            </div>
         </div>
     </div>
+
 
     <!-- AIOps Runbooks & Service Catalog View -->
     
@@ -4233,6 +4844,591 @@
 
         let allBots = {};
 
+        
+        /* ==========================================================================
+           ANTIGRAVITY 3-PANE WORKSPACE JAVASCRIPT CONTROLLER
+           ========================================================================== */
+        let agActiveBotId = null;
+        let agActiveRunIndex = 0;
+        let agActiveBotData = null;
+
+        async function loadBots() {
+            try {
+                const res = await fetch('/api/bots');
+                const data = await res.json();
+                allBots = data.bots || {};
+                renderAgWorkspace();
+            } catch (e) {
+                console.error("Failed to load bots:", e);
+            }
+        }
+
+        function renderAgWorkspace() {
+            const listEl = document.getElementById('ag-bots-list');
+            const countEl = document.getElementById('ag-bots-count');
+            if (!listEl) return;
+
+            const botKeys = Object.keys(allBots);
+            if (countEl) countEl.textContent = botKeys.length;
+
+            if (botKeys.length === 0) {
+                listEl.innerHTML = `
+                    <div style="text-align: center; padding: 30px 14px; color: var(--text-muted);">
+                        <p style="font-size: 12px; margin-bottom: 12px;">No bots configured yet.</p>
+                        <button class="ag-btn-new-bot" onclick="openBotCreatorModal()" style="width: 100%;">+ Create First Bot</button>
+                    </div>
+                `;
+                agRenderActiveBotDetails();
+                return;
+            }
+
+            // Default to first bot if none selected
+            if (!agActiveBotId || !allBots[agActiveBotId]) {
+                agActiveBotId = botKeys[0];
+                agActiveRunIndex = 0;
+            }
+
+            listEl.innerHTML = '';
+
+            botKeys.forEach(bId => {
+                const bot = allBots[bId];
+                const isRunning = !!bot.is_running;
+                const isSelected = bId === agActiveBotId;
+                const runs = bot.run_history || [];
+                const latestRun = runs.length > 0 ? runs[0] : null;
+
+                let statusBadge = '<span class="badge badge-inactive" style="font-size: 9.5px;">⚪ IDLE</span>';
+                if (isRunning) {
+                    statusBadge = '<span class="badge badge-ok" style="font-size: 9.5px; background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e;">🟢 LOOP</span>';
+                } else if (latestRun && (latestRun.status === 'incident_created' || latestRun.status === 'incident_resolved' || latestRun.status === 'alert')) {
+                    statusBadge = '<span class="badge badge-err" style="font-size: 9.5px;">🔴 ALERT</span>';
+                } else if (latestRun && latestRun.status === 'success') {
+                    statusBadge = '<span class="badge badge-ok" style="font-size: 9.5px;">🟢 OK</span>';
+                }
+
+                const card = document.createElement('div');
+                card.className = `ag-bot-card ${isSelected ? 'active' : ''}`;
+                card.id = `ag-card-${bId}`;
+                card.onclick = (e) => {
+                    if (e.target.closest('button')) return;
+                    agSelectBot(bId);
+                };
+
+                card.innerHTML = `
+                    <div class="ag-bot-card-top">
+                        <div class="ag-bot-name">
+                            <span>🤖</span>
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px;">${escapeHtml(bot.name || bId)}</span>
+                        </div>
+                        ${statusBadge}
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); line-height: 1.35; margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        ${escapeHtml(bot.description || bot.instructions || 'Autonomous DevOps Agent')}
+                    </div>
+                    <div class="ag-bot-card-actions">
+                        <button class="ag-mini-btn run" onclick="agTriggerBotDirect('${bId}')" title="Run single pass on-demand">
+                            ▶ Run
+                        </button>
+                        <button class="ag-mini-btn" onclick="agToggleBotLoopDirect('${bId}')" title="Toggle background loop">
+                            ${isRunning ? '⏹ Stop' : '⚡ Loop'}
+                        </button>
+                        <button class="ag-mini-btn danger" onclick="deleteBot('${bId}')" title="Delete Bot" style="margin-left: auto;">
+                            🗑
+                        </button>
+                    </div>
+                `;
+                listEl.appendChild(card);
+            });
+
+            agRenderActiveBotDetails();
+        }
+
+        function agSelectBot(botId) {
+            agActiveBotId = botId;
+            agActiveRunIndex = 0;
+            renderAgWorkspace();
+        }
+
+        function agSelectRun(runIndex) {
+            agActiveRunIndex = runIndex;
+            agRenderActiveBotDetails();
+        }
+
+        function agRenderActiveBotDetails() {
+            if (!agActiveBotId || !allBots[agActiveBotId]) {
+                const titleEl = document.getElementById('ag-active-bot-title');
+                if (titleEl) titleEl.textContent = 'Select an Agent';
+                const screenEl = document.getElementById('ag-terminal-screen');
+                if (screenEl) screenEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">Select or create an autonomous agent from the left rail to view execution telemetry.</div>';
+                const reportEl = document.getElementById('ag-report-content');
+                if (reportEl) reportEl.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">No agent selected.</div>';
+                return;
+            }
+
+            agActiveBotData = allBots[agActiveBotId];
+            const bot = agActiveBotData;
+            const isRunning = !!bot.is_running;
+            const runs = bot.run_history || [];
+            const ctx = bot.context_config || {};
+
+            // 1. Update Middle Header
+            const titleEl = document.getElementById('ag-active-bot-title');
+            if (titleEl) titleEl.textContent = bot.name || agActiveBotId;
+
+            const descEl = document.getElementById('ag-active-bot-desc');
+            if (descEl) descEl.textContent = bot.description || bot.instructions || 'Autonomous agent monitoring and orchestrating connected tools.';
+
+            const badgeEl = document.getElementById('ag-active-bot-badge');
+            if (badgeEl) {
+                badgeEl.className = `badge ${isRunning ? 'badge-ok' : 'badge-inactive'}`;
+                badgeEl.textContent = isRunning ? '🟢 ACTIVE LOOP' : '⚪ IDLE / STANDBY';
+            }
+
+            const loopBtn = document.getElementById('ag-btn-loop-toggle');
+            if (loopBtn) {
+                loopBtn.className = `btn-loop-toggle ${isRunning ? 'running' : ''}`;
+                loopBtn.innerHTML = isRunning ? '⏹ Stop Loop' : '⚡ Start Loop';
+            }
+
+            const pulseDot = document.getElementById('ag-bot-pulse-dot');
+            if (pulseDot) {
+                pulseDot.style.background = isRunning ? '#22c55e' : '#94a3b8';
+            }
+
+            // Target Context Tags
+            const tagsEl = document.getElementById('ag-target-tags');
+            if (tagsEl) {
+                let tagsHtml = '';
+                if (ctx.app_service_name || ctx.app_name) tagsHtml += `<span class="ag-tag">🌐 App: <strong>${escapeHtml(ctx.app_service_name || ctx.app_name)}</strong></span>`;
+                if (ctx.project || ctx.ado_repo) tagsHtml += `<span class="ag-tag">📁 Project: <strong>${escapeHtml(ctx.project || ctx.ado_repo)}</strong></span>`;
+                if (ctx.pipeline || ctx.pipeline_name) tagsHtml += `<span class="ag-tag">⚙️ Pipeline: <strong>${escapeHtml(ctx.pipeline || ctx.pipeline_name)}</strong></span>`;
+                if (ctx.branch || ctx.target_branch) tagsHtml += `<span class="ag-tag">🌿 Branch: <strong>${escapeHtml(ctx.branch || ctx.target_branch)}</strong></span>`;
+                if (ctx.container_name) tagsHtml += `<span class="ag-tag">📦 Container: <strong>${escapeHtml(ctx.container_name)}</strong></span>`;
+                (bot.tools_required || []).forEach(t => {
+                    tagsHtml += `<span class="ag-tag" style="border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;">🛠️ ${escapeHtml(t)}</span>`;
+                });
+                tagsEl.innerHTML = tagsHtml || '<span class="ag-tag" style="color: var(--text-muted);">No specific context bound</span>';
+            }
+
+            // CLI Host & Prompt
+            const hostEl = document.getElementById('ag-terminal-host');
+            if (hostEl) hostEl.textContent = `agent@mcp-ai-portal: ~/bots/${agActiveBotId}`;
+
+            const promptLabel = document.getElementById('ag-cli-prompt-label');
+            if (promptLabel) promptLabel.textContent = `agent@${agActiveBotId}:~$`;
+
+            // 2. Populate Sessions List in Left Rail
+            const sessionsList = document.getElementById('ag-sessions-list');
+            const sessionsCount = document.getElementById('ag-sessions-count');
+            if (sessionsCount) sessionsCount.textContent = `${runs.length} runs`;
+
+            if (sessionsList) {
+                if (runs.length === 0) {
+                    sessionsList.innerHTML = `<div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 11px;">No runs recorded.<br>Click <strong style="color: #34d399;">▶ Run Once</strong> to execute.</div>`;
+                } else {
+                    sessionsList.innerHTML = runs.map((r, idx) => {
+                        const isSelected = idx === agActiveRunIndex;
+                        const runNum = runs.length - idx;
+                        const timeStr = r.timestamp ? r.timestamp.split(' ')[1] || r.timestamp : `Run #${runNum}`;
+                        const st = r.status || 'healthy';
+                        const badgeDot = (st === 'incident_created' || st === 'alert') ? '🔴' : ((st === 'deduplicated') ? '🛡️' : '🟢');
+                        return `
+                            <div class="ag-session-item ${isSelected ? 'active' : ''}" onclick="agSelectRun(${idx})">
+                                <span>${badgeDot} <strong>Run #${runNum}</strong></span>
+                                <span style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(timeStr)}</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // 3. Render Middle Terminal Screen
+            const screenEl = document.getElementById('ag-terminal-screen');
+            if (screenEl) {
+                if (runs.length === 0) {
+                    screenEl.innerHTML = `
+                        <div style="color: #64748b; font-style: italic; padding: 20px 0;">
+                            [STANDBY] Agent '${escapeHtml(bot.name || agActiveBotId)}' is ready.<br>
+                            Click <strong style="color: #10b981;">▶ Run Once</strong> in the header or type <strong style="color: #38bdf8;">run</strong> in the command line below.
+                        </div>
+                        <div class="terminal-prompt-line" style="margin-top: 14px;">
+                            <span style="color: #10b981; font-weight: bold;">agent@mcp-portal</span>:<span style="color: #38bdf8;">~/bots/${escapeHtml(agActiveBotId)}</span>$ <span class="terminal-cursor">█</span>
+                        </div>
+                    `;
+                } else {
+                    const currentRun = runs[agActiveRunIndex] || runs[0];
+                    let streamText = currentRun.terminal_output;
+                    if (!streamText || typeof streamText !== 'string' || streamText.trim().length === 0) {
+                        streamText = synthesizeTerminalLinesFromRun(currentRun, bot);
+                    }
+
+                    const lines = streamText.split('\n');
+                    const htmlLines = lines.map(l => formatTerminalLineSyntax(l)).join('');
+                    const promptLine = `
+                        <div class="terminal-prompt-line" style="margin-top: 10px;">
+                            <span style="color: #10b981; font-weight: bold;">agent@mcp-portal</span>:<span style="color: #38bdf8;">~/bots/${escapeHtml(agActiveBotId)}</span>$ <span class="terminal-cursor">█</span>
+                        </div>
+                    `;
+                    screenEl.innerHTML = htmlLines + promptLine;
+
+                    const autoScroll = document.getElementById('ag-autoscroll-chk');
+                    if (autoScroll && autoScroll.checked) {
+                        screenEl.scrollTop = screenEl.scrollHeight;
+                    }
+                }
+            }
+
+            // 4. Render Middle Workflow Stepper & DAG
+            const stepperBox = document.getElementById('ag-workflow-stepper-box');
+            const dagCount = document.getElementById('ag-dag-step-count');
+            const steps = (runs.length > 0 && runs[agActiveRunIndex] && runs[agActiveRunIndex].steps) ? runs[agActiveRunIndex].steps : (bot.workflow_steps || []);
+            if (dagCount) dagCount.textContent = steps.length;
+
+            if (stepperBox) {
+                if (steps.length === 0) {
+                    stepperBox.innerHTML = `<div style="color: var(--text-muted); font-size: 12px; padding: 20px;">No static workflow steps configured. ReAct autonomous loop executes tools dynamically.</div>`;
+                } else {
+                    stepperBox.innerHTML = steps.map((s, idx) => {
+                        const sNum = s.step || (idx + 1);
+                        const sName = s.name || s.action || `Step ${sNum}`;
+                        const sTool = s.tool ? `(${s.server || 'mcp'}.${s.tool})` : '';
+                        const sDet = s.details || s.mcp_output || 'Step validated successfully.';
+                        const sStatus = s.status || 'success';
+                        const isErr = sStatus === 'alert' || sStatus === 'failed';
+                        const badgeColor = isErr ? '#ef4444' : '#10b981';
+                        return `
+                            <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-left: 3px solid ${badgeColor}; border-radius: 6px; padding: 12px 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <strong style="color: #f8fafc; font-size: 13px;">Step ${sNum}: ${escapeHtml(sName)}</strong>
+                                    <span style="font-size: 11px; color: ${badgeColor}; font-weight: 700;">${isErr ? '🔴 ALERT' : '🟢 SUCCESS'}</span>
+                                </div>
+                                <div style="font-size: 11.5px; color: #38bdf8; font-family: var(--font-mono); margin-bottom: 4px;">${escapeHtml(sTool)}</div>
+                                <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;">${escapeHtml(sDet.substring(0, 200))}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // 5. Render Target Context Table
+            const tbody = document.getElementById('ag-context-tbody');
+            if (tbody) {
+                const entries = Object.entries(ctx).filter(([k, v]) => !k.startsWith('_') && v);
+                if (entries.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="2" style="padding: 14px; text-align: center; color: var(--text-muted);">No context parameters configured.</td></tr>`;
+                } else {
+                    tbody.innerHTML = entries.map(([k, v]) => `
+                        <tr>
+                            <td style="padding: 9px 14px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.05);">${escapeHtml(k)}</td>
+                            <td style="padding: 9px 14px; color: #38bdf8; font-family: var(--font-mono); border-bottom: 1px solid rgba(255,255,255,0.05);">${escapeHtml(String(v))}</td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            // 6. Render Right Pane: Generated Artifacts & Reports (Markdown via marked.js)
+            const reportEl = document.getElementById('ag-report-content');
+            const rcaTabBtn = document.getElementById('ag-art-tab-rca');
+            const snowTabBtn = document.getElementById('ag-art-tab-snow');
+
+            if (reportEl) {
+                if (runs.length === 0) {
+                    reportEl.innerHTML = `
+                        <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                            <div style="font-size: 32px; margin-bottom: 12px;">📊</div>
+                            <h3 style="color: #cbd5e1; font-size: 15px; margin-bottom: 6px;">No Execution Artifacts Generated Yet</h3>
+                            <p style="font-size: 12.5px; line-height: 1.5; max-width: 320px; margin: 0 auto 16px auto;">
+                                Trigger this autonomous agent to synthesize real-time executive reports, diagnostic logs, and RCA findings.
+                            </p>
+                            <button class="btn-run-once" onclick="agTriggerActiveBotRun()" style="margin: 0 auto;">
+                                <span>▶</span> Run Once Now
+                            </button>
+                        </div>
+                    `;
+                    if (rcaTabBtn) rcaTabBtn.style.display = 'none';
+                    if (snowTabBtn) snowTabBtn.style.display = 'none';
+                } else {
+                    const currentRun = runs[agActiveRunIndex] || runs[0];
+                    const reportMd = currentRun.report_markdown || currentRun.report || (currentRun.rca && currentRun.rca.formatted_rca_markdown);
+                    
+                    if (currentRun.rca && currentRun.rca.root_cause && rcaTabBtn) {
+                        rcaTabBtn.style.display = 'block';
+                    } else if (rcaTabBtn) {
+                        rcaTabBtn.style.display = 'none';
+                    }
+
+                    if (reportMd && typeof reportMd === 'string' && reportMd.trim().length > 10) {
+                        try {
+                            if (window.marked && typeof window.marked.parse === 'function') {
+                                reportEl.innerHTML = window.marked.parse(reportMd);
+                            } else {
+                                reportEl.innerHTML = formatMarkdownToHtml(reportMd);
+                            }
+                        } catch (e) {
+                            reportEl.innerHTML = formatMarkdownToHtml(reportMd);
+                        }
+                    } else {
+                        const summary = currentRun.summary || `Autonomous execution completed for ${escapeHtml(bot.name)}.`;
+                        reportEl.innerHTML = `
+                            <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; padding: 18px;">
+                                <h3 style="color: #38bdf8; margin-top: 0;">📊 Execution Summary</h3>
+                                <p style="color: #e2e8f0; font-size: 13px; line-height: 1.6;">${escapeHtml(summary)}</p>
+                                <div style="margin-top: 14px; font-size: 11.5px; color: var(--text-muted);">
+                                    Executed at: <code>${escapeHtml(currentRun.timestamp || 'N/A')}</code> | Duration: <code>${currentRun.duration_seconds || 1.0}s</code>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+        }
+
+        async function agTriggerActiveBotRun() {
+            if (!agActiveBotId) return;
+            const btn = document.getElementById('ag-btn-run-once');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span>⏳</span> Executing...';
+            }
+
+            const screenEl = document.getElementById('ag-terminal-screen');
+            if (screenEl) {
+                const now = new Date().toLocaleTimeString();
+                const line = document.createElement('div');
+                line.style.color = '#38bdf8';
+                line.style.fontWeight = 'bold';
+                line.style.padding = '4px 0';
+                line.textContent = `[${now}] 🤖 [AGENT_WAKEUP] Triggering on-demand execution pass for '${agActiveBotId}'...`;
+                screenEl.appendChild(line);
+                screenEl.scrollTop = screenEl.scrollHeight;
+            }
+
+            try {
+                const res = await fetch(`/api/bots/${agActiveBotId}/run`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('🚀 Bot executed successfully! Artifacts updated.', 'success');
+                } else {
+                    showToast(`⚠️ Bot finished with notice: ${data.summary || data.error || 'Complete'}`, 'info');
+                }
+                await loadBots();
+                agActiveRunIndex = 0;
+                agRenderActiveBotDetails();
+            } catch (e) {
+                showToast(`❌ Run failed: ${e}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>▶</span> Run Once';
+                }
+            }
+        }
+
+        async function agTriggerBotDirect(botId) {
+            agActiveBotId = botId;
+            agActiveRunIndex = 0;
+            renderAgWorkspace();
+            await agTriggerActiveBotRun();
+        }
+
+        async function agToggleActiveBotLoop() {
+            if (!agActiveBotId) return;
+            const bot = allBots[agActiveBotId] || {};
+            const isRunning = !!bot.is_running;
+
+            if (isRunning) {
+                await stopWatchdog(agActiveBotId);
+            } else {
+                const selectEl = document.getElementById('ag-loop-interval-select');
+                const intervalSec = selectEl ? parseInt(selectEl.value, 10) : 600;
+                try {
+                    const res = await fetch(`/api/bots/${agActiveBotId}/start_daemon`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ interval_seconds: intervalSec })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showToast(`⚡ Started autonomous loop (${Math.round(intervalSec/60)}m interval)!`, 'success');
+                        await loadBots();
+                    } else {
+                        showToast(`❌ Failed to start loop: ${data.error}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`❌ Error: ${e}`, 'error');
+                }
+            }
+        }
+
+        async function agToggleBotLoopDirect(botId) {
+            agActiveBotId = botId;
+            renderAgWorkspace();
+            await agToggleActiveBotLoop();
+        }
+
+        async function agClearActiveBotLogs() {
+            if (!agActiveBotId) return;
+            if (!confirm(`Are you sure you want to clear all execution sessions and logs for '${agActiveBotId}'?`)) return;
+            try {
+                const res = await fetch(`/api/bots/${agActiveBotId}/clear_logs`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('🧹 Execution sessions cleared.', 'success');
+                    await loadBots();
+                }
+            } catch (e) {
+                showToast(`❌ Failed to clear logs: ${e}`, 'error');
+            }
+        }
+
+        function agSwitchMiddleTab(tab) {
+            const termBtn = document.getElementById('ag-tab-terminal-btn');
+            const flowBtn = document.getElementById('ag-tab-workflow-btn');
+            const ctxBtn = document.getElementById('ag-tab-context-btn');
+
+            const termView = document.getElementById('ag-terminal-view');
+            const flowView = document.getElementById('ag-workflow-view');
+            const ctxView = document.getElementById('ag-context-view');
+
+            if (termBtn) termBtn.classList.remove('active');
+            if (flowBtn) flowBtn.classList.remove('active');
+            if (ctxBtn) ctxBtn.classList.remove('active');
+
+            if (termView) termView.style.display = 'none';
+            if (flowView) flowView.style.display = 'none';
+            if (ctxView) ctxView.style.display = 'none';
+
+            if (tab === 'workflow') {
+                if (flowBtn) flowBtn.classList.add('active');
+                if (flowView) flowView.style.display = 'block';
+            } else if (tab === 'context') {
+                if (ctxBtn) ctxBtn.classList.add('active');
+                if (ctxView) ctxView.style.display = 'block';
+            } else {
+                if (termBtn) termBtn.classList.add('active');
+                if (termView) termView.style.display = 'flex';
+            }
+        }
+
+        function agSwitchArtifactTab(tab) {
+            const reportBtn = document.getElementById('ag-art-tab-report');
+            const rcaBtn = document.getElementById('ag-art-tab-rca');
+            const reportEl = document.getElementById('ag-report-content');
+
+            if (reportBtn) reportBtn.classList.remove('active');
+            if (rcaBtn) rcaBtn.classList.remove('active');
+
+            if (!agActiveBotData) return;
+            const runs = agActiveBotData.run_history || [];
+            const currentRun = runs[agActiveRunIndex] || runs[0] || {};
+
+            if (tab === 'rca' && currentRun.rca) {
+                if (rcaBtn) rcaBtn.classList.add('active');
+                const rca = currentRun.rca;
+                const rcaMd = rca.formatted_rca_markdown || `### 🧠 Root Cause Analysis
+
+**Root Cause**: ${rca.root_cause || 'N/A'}
+
+**Remediation**: ${rca.recommended_fix || 'N/A'}`;
+                if (reportEl) {
+                    if (window.marked && typeof window.marked.parse === 'function') {
+                        reportEl.innerHTML = window.marked.parse(rcaMd);
+                    } else {
+                        reportEl.innerHTML = formatMarkdownToHtml(rcaMd);
+                    }
+                }
+            } else {
+                if (reportBtn) reportBtn.classList.add('active');
+                const reportMd = currentRun.report_markdown || currentRun.report || 'No executive report generated yet.';
+                if (reportEl) {
+                    if (window.marked && typeof window.marked.parse === 'function') {
+                        reportEl.innerHTML = window.marked.parse(reportMd);
+                    } else {
+                        reportEl.innerHTML = formatMarkdownToHtml(reportMd);
+                    }
+                }
+            }
+        }
+
+        function agHandleCliKey(e) {
+            if (e.key === 'Enter') {
+                agExecuteCli();
+            }
+        }
+
+        function agExecuteCli() {
+            const input = document.getElementById('ag-cli-input');
+            if (!input || !input.value.trim()) return;
+            const cmd = input.value.trim();
+            input.value = '';
+
+            const screenEl = document.getElementById('ag-terminal-screen');
+            if (screenEl) {
+                const promptDiv = document.createElement('div');
+                promptDiv.className = 'terminal-prompt-line';
+                promptDiv.innerHTML = `<span style="color: #10b981; font-weight: bold;">agent@${escapeHtml(agActiveBotId || 'bot')}</span>$ <span style="color: #f8fafc;">${escapeHtml(cmd)}</span>`;
+                screenEl.appendChild(promptDiv);
+                screenEl.scrollTop = screenEl.scrollHeight;
+            }
+
+            const lower = cmd.toLowerCase();
+            if (lower === 'clear') {
+                if (screenEl) screenEl.innerHTML = '';
+                return;
+            }
+            if (lower === 'status') {
+                const isRunning = agActiveBotData ? !!agActiveBotData.is_running : false;
+                const runs = agActiveBotData ? (agActiveBotData.run_history || []).length : 0;
+                const line = document.createElement('div');
+                line.style.color = '#34d399';
+                line.textContent = `[STATUS] Bot: ${agActiveBotId} | State: ${isRunning ? 'ACTIVE LOOP' : 'IDLE'} | Total Runs: ${runs}`;
+                if (screenEl) screenEl.appendChild(line);
+                return;
+            }
+
+            agTriggerActiveBotRun();
+        }
+
+        function agCopyTerminalOutput() {
+            const screenEl = document.getElementById('ag-terminal-screen');
+            if (!screenEl) return;
+            navigator.clipboard.writeText(screenEl.innerText).then(() => {
+                showToast('📋 Terminal logs copied to clipboard!', 'info');
+            });
+        }
+
+        function agCopyReportMarkdown() {
+            if (!agActiveBotData) return;
+            const runs = agActiveBotData.run_history || [];
+            const currentRun = runs[agActiveRunIndex] || runs[0];
+            if (!currentRun || !currentRun.report_markdown) {
+                showToast('No report available to copy.', 'info');
+                return;
+            }
+            navigator.clipboard.writeText(currentRun.report_markdown).then(() => {
+                showToast('📋 Executive Report Markdown copied!', 'success');
+            });
+        }
+
+        function agDownloadReportMarkdown() {
+            if (!agActiveBotData) return;
+            const runs = agActiveBotData.run_history || [];
+            const currentRun = runs[agActiveRunIndex] || runs[0];
+            if (!currentRun || !currentRun.report_markdown) {
+                showToast('No report available to export.', 'info');
+                return;
+            }
+            const blob = new Blob([currentRun.report_markdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${agActiveBotId}_report_run_${runs.length - agActiveRunIndex}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('⬇ Report downloaded.', 'success');
+        }
+
+
         function switchMainView(view) {
             const serversView = document.getElementById('servers-view');
             const botsView = document.getElementById('bots-dashboard-view');
@@ -4249,7 +5445,7 @@
             if (tabAiops) tabAiops.classList.remove('active');
 
             if (view === 'bots') {
-                if (botsView) botsView.style.display = 'block';
+                if (botsView) botsView.style.display = 'flex';
                 if (tabBots) tabBots.classList.add('active');
                 loadBots();
             } else if (view === 'aiops') {

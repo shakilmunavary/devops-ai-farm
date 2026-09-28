@@ -371,15 +371,15 @@ class BotDaemonManager:
         return True
 
     def start_active_daemons(self):
-        """Scans all registered bots and starts background daemon threads for bots with status 'active'."""
+        """Only auto-starts background loops for bots that explicitly have auto_start_loop enabled."""
         try:
             bots = bot_registry.list_bots()
             for bot_id, bot_data in bots.items():
-                if bot_data.get("status") == "active" and not self.is_running(bot_id):
-                    logger.info(f"🔄 Auto-starting background watchdog daemon for active bot '{bot_id}'...")
+                if bot_data.get("auto_start_loop") is True and not self.is_running(bot_id):
+                    logger.info(f"🔄 Starting background watchdog loop for bot '{bot_id}'...")
                     self.start(bot_id)
         except Exception as e:
-            logger.warning(f"Notice auto-starting active bot daemons: {e}")
+            logger.warning(f"Notice starting active bot daemons: {e}")
 
 
 daemon_manager = BotDaemonManager()
@@ -1048,8 +1048,8 @@ def generate_dynamic_execution_report(
     status: str = "healthy"
 ) -> str:
     """
-    Generates a rich, structured, universal Markdown Dashboard tailored directly to the executed workflow.
-    Agnostic to use case: handles CI/CD, ITSM, Cloud VMs, App Services, or custom orchestration.
+    Generates a rich, structured, universal Markdown Report tailored directly to the executed workflow.
+    Uses Mistral AI to synthesize an Executive Intelligence Report covering Findings, Metrics, RCA, and Next Steps.
     """
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
     
@@ -1064,7 +1064,7 @@ def generate_dynamic_execution_report(
     
     steps_table = "\n".join(steps_table_rows) if steps_table_rows else "| No steps executed | - | ⚪ Pending | - |"
 
-    # 2. Context / Scope Table (if context exists)
+    # 2. Context / Scope Table
     context_section = ""
     if context:
         ctx_rows = [f"| **{k}** | `{v}` |" for k, v in context.items() if v and not str(k).startswith("_")]
@@ -1076,7 +1076,7 @@ def generate_dynamic_execution_report(
 {chr(10).join(ctx_rows)}
 """
 
-    # 3. Dedicated AI RCA Section (Mistral AI Root Cause & Remediation)
+    # 3. Dedicated AI RCA / Diagnostic Findings
     rca_markdown = ""
     for out in step_outputs:
         if out.get("tool") == "generate_ai_rca" or "rca" in str(out.get("action", "")).lower():
@@ -1084,43 +1084,109 @@ def generate_dynamic_execution_report(
             if rca_markdown and len(rca_markdown) > 30:
                 break
 
-    rca_section = ""
-    if rca_markdown:
-        rca_section = f"""
+    # 4. LLM Synthesis for Executive Status & Intelligence Report
+    llm_synthesis = ""
+    try:
+        telemetry_summary = []
+        for out in step_outputs:
+            act = out.get("action") or out.get("tool")
+            srv = out.get("server", "")
+            tool = out.get("tool", "")
+            raw = str(out.get("output") or "")[:1500]
+            if raw.strip():
+                telemetry_summary.append(f"Action: {act} ({srv}.{tool})\nOutput:\n{raw}\n---")
+
+        telemetry_text = "\n".join(telemetry_summary) if telemetry_summary else "No raw tool outputs captured."
+
+        prompt_messages = [
+            {
+                "role": "system",
+                "content": "You are an Executive DevOps AI Intelligence & Reporting Engine. Your job is to analyze real tool execution outputs and synthesize a professional, executive Markdown report. Be specific, actionable, and structured with clear headings, tables, and bullet points."
+            },
+            {
+                "role": "user",
+                "content": f"""Generate an Executive Report for the autonomous bot execution.
+
+BOT NAME: {bot_name}
+MISSION DIRECTIVE: {instructions}
+EXECUTION STATUS: {status}
+TARGET CONTEXT:
+{json.dumps(context, indent=2)}
+
+STEP TELEMETRY & TOOL OUTPUTS:
+{telemetry_text}
+
+FORMAT IN STRICT CLEAN MARKDOWN:
+### 📊 Executive Summary & Health Verdict
+(2-3 sentences summarizing the operational status, what was inspected, and whether issues were found or resolved)
+
+### 📈 Key Operational Metrics & Status
+(Table of verified metrics, e.g. Build status, Container state, ServiceNow Ticket sys_id/number, Latency, Error counts)
+
+### 🔍 Detailed Telemetry & Anomaly Findings
+(Bullet points detailing the exact findings from each tool, e.g. pipeline builds, log traces, incident records)
+
+### 🛠️ Remediation & Autonomous Actions Taken
+(Summary of what the bot did, e.g. ServiceNow ticket creation/deduplication, work note update, RCA generation, or self-healing)
+
+### 🚀 Recommended Next Actions
+(Actionable next steps for the engineering or operations team)"""
+            }
+        ]
+
+        synth_res = llm_client.chat_completion(
+            messages=prompt_messages,
+            temperature=0.2,
+            max_tokens=1500,
+            timeout=12
+        )
+        llm_synthesis = synth_res.get("content", "").strip()
+    except Exception as e_synth:
+        logger.warning(f"Notice during LLM report synthesis: {e_synth}")
+        llm_synthesis = ""
+
+    verdict_badge = "🟢 **OPERATIONAL / HEALTHY**" if status == "healthy" else ("🟡 **ATTENTION REQUIRED**" if status == "warning" else "🔴 **ACTION REQUIRED / ANOMALY DETECTED**")
+
+    if llm_synthesis and len(llm_synthesis) > 100:
+        report = f"""{llm_synthesis}
+
 ---
 
-#### 🧠 Autonomous AI Root Cause Analysis (RCA) & Remediation Plan
-{rca_markdown}
+#### 📋 Execution Lifecycle Trace
+| Step | Action & Tool | Status | Summary |
+| :--- | :--- | :--- | :--- |
+{steps_table}
+{context_section}
 """
-
-    # 4. Dynamic Tool Output & Telemetry Highlights
-    findings_blocks = []
-    for out in step_outputs:
-        srv = out.get("server", "")
-        tool = out.get("tool", "")
-        action = out.get("action", "")
-        raw = (out.get("output") or "").strip()
-        if not raw:
-            continue
-        if tool == "generate_ai_rca" or (srv == "built_in" and "rca" in tool):
-            continue  # Already rendered prominently in RCA Section
-
-        clean_highlight = raw
-        if len(clean_highlight) > 1200:
-            clean_highlight = clean_highlight[:1200] + "\n... [telemetry truncated]"
-
-        findings_blocks.append(f"""##### 🔹 {action} (`{srv}.{tool}`)
+    else:
+        # Structured template fallback
+        findings_blocks = []
+        for out in step_outputs:
+            srv = out.get("server", "")
+            tool = out.get("tool", "")
+            action = out.get("action", "")
+            raw = (out.get("output") or "").strip()
+            if not raw or tool == "generate_ai_rca":
+                continue
+            clean_highlight = raw[:1200] + ("\n... [truncated]" if len(raw) > 1200 else "")
+            findings_blocks.append(f"""##### 🔹 {action} (`{srv}.{tool}`)
 ```text
 {clean_highlight}
 ```
 """)
 
-    findings_section = "\n".join(findings_blocks) if findings_blocks else "All telemetry verified within nominal parameters."
+        findings_section = "\n".join(findings_blocks) if findings_blocks else "All telemetry verified within nominal parameters."
 
-    # 5. Status Verdict
-    verdict_badge = "🟢 **OPERATIONAL / HEALTHY**" if status == "healthy" else ("🟡 **ATTENTION REQUIRED**" if status == "warning" else "🔴 **ACTION REQUIRED / ANOMALY DETECTED**")
+        rca_section = ""
+        if rca_markdown:
+            rca_section = f"""
+---
 
-    report = f"""### 📊 Autonomous Execution Dashboard: {bot_name}
+#### 🧠 Autonomous AI Root Cause Analysis (RCA)
+{rca_markdown}
+"""
+
+        report = f"""### 📊 Autonomous Execution Report: {bot_name}
 
 | Metric | Telemetry Value |
 | :--- | :--- |
@@ -1137,6 +1203,7 @@ def generate_dynamic_execution_report(
 {steps_table}
 {context_section}
 {rca_section}
+
 ---
 
 #### 🔍 Live Telemetry & Observability Findings
