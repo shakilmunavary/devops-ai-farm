@@ -2468,10 +2468,10 @@
         </div>
 
         <div class="view-switcher">
-            <button id="view-tab-servers" class="btn-tab active" onclick="switchMainView('servers')">
+            <button id="view-tab-servers" class="btn-tab" onclick="switchMainView('servers')">
                 📦 MCP Servers
             </button>
-            <button id="view-tab-bots" class="btn-tab" onclick="switchMainView('bots')">
+            <button id="view-tab-bots" class="btn-tab active" onclick="switchMainView('bots')">
                 🤖 Autonomous Bots Dashboard
             </button>
             <button id="view-tab-aiops" class="btn-tab" onclick="switchMainView('aiops')">
@@ -2781,7 +2781,7 @@
     </div>
 
 
-    <div class="app-container" id="servers-view">
+    <div class="app-container" id="servers-view" style="display: none;">
         <div class="left-rail">
             <div class="rail-header">
                 <h2>Connected Tools</h2>
@@ -3347,6 +3347,7 @@
             fetchLLMConfig();
             fetchServers();
             setupTextareaAutoGrow();
+            switchMainView('bots');
         });
 
         async function fetchGatewayKey() {
@@ -5458,195 +5459,22 @@
             }
         }
 
-        async function loadBots() {
+        async function deleteBot(botId) {
+            if (!confirm(`Are you sure you want to delete this bot (${botId})?`)) return;
             try {
-                const res = await fetch('/api/bots');
-                const data = await res.json();
-                allBots = data.bots || {};
-                renderBotsGrid();
-            } catch (e) {
-                console.error("Failed to load bots:", e);
-            }
-        }
-
-        function renderBotsGrid() {
-            const container = document.getElementById('bots-grid-container');
-            if (!container) return;
-
-            const botKeys = Object.keys(allBots);
-            let totalRuns = 0;
-            let activeCount = 0;
-            let totalIncidents = 0;
-
-            if (botKeys.length === 0) {
-                container.innerHTML = `
-                    <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; background: rgba(30, 41, 59, 0.4); border-radius: 14px; border: 1px dashed var(--border-color);">
-                        <h3 style="color: #cbd5e1; margin-bottom: 8px;">No Autonomous Bots Configured</h3>
-                        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Create your first AI Watchdog bot to monitor containers, perform RCA, and automate ServiceNow tickets.</p>
-                        <button class="btn-add" onclick="openBotCreatorModal()">✨ + Create New AI Bot</button>
-                    </div>
-                `;
-                return;
-            }
-
-            container.innerHTML = '';
-
-            botKeys.forEach(botId => {
-                const bot = allBots[botId];
-                const isRunning = !!bot.is_running;
-                if (isRunning) activeCount++;
-                totalRuns += (bot.run_count || 0);
-
-                // Count incident creations in history
-                if (bot.run_history) {
-                    bot.run_history.forEach(r => {
-                        if (r.status === 'incident_created' || r.status === 'incident_resolved') totalIncidents++;
-                    });
-                }
-
-                const ctx = bot.context_config || {};
-                const sched = bot.schedule || {};
-
-                // 1. Dynamic Schedule Tag & Label
-                let schedTag = '';
-                let schedSummary = '5m';
-                if (sched.type === 'calendar') {
-                    const rawTimes = sched.execution_times ? (Array.isArray(sched.execution_times) ? sched.execution_times.join(', ') : sched.execution_times) : '09:00';
-                    const range = (sched.start_date && sched.end_date) ? ` (${sched.start_date} → ${sched.end_date})` : '';
-                    schedTag = `<span class="bot-tag" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.5); color: #c7d2fe;">📅 Daily at ${escapeHtml(rawTimes)}${escapeHtml(range)}</span>`;
-                    schedSummary = rawTimes;
-                } else if (sched.type === 'interval' || bot.trigger_type === 'interval') {
-                    const mins = sched.interval_minutes || Math.round((sched.interval_seconds || bot.interval_seconds || 300) / 60);
-                    const secs = sched.interval_seconds || bot.interval_seconds || 300;
-                    const label = (secs < 60) ? `${secs}s` : `${mins}m`;
-                    schedTag = `<span class="bot-tag" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #6ee7b7;">⏱️ Every ${label}</span>`;
-                    schedSummary = label;
-                } else {
-                    schedTag = `<span class="bot-tag" style="background: rgba(148, 163, 184, 0.15); border: 1px solid #475569; color: #cbd5e1;">⚡ On-Demand</span>`;
-                    schedSummary = 'On-Demand';
-                }
-
-                // 2. Dynamic Connected MCP Tool Tags
-                const toolFriendlyNames = {
-                    "azure_devops": "🛠️ Azure DevOps",
-                    "servicenow": "🛠️ ServiceNow",
-                    "azure_virtual_machines": "🛠️ Azure VMs",
-                    "azure_app_service": "🛠️ Azure App Service",
-                    "github": "🛠️ GitHub",
-                    "jenkins": "🛠️ Jenkins",
-                    "docker": "🛠️ Docker"
-                };
-                const toolTags = (bot.tools_required || []).map(t => {
-                    const l = toolFriendlyNames[t.toLowerCase()] || `🛠️ ${t.replace(/_/g, ' ').toUpperCase()}`;
-                    return `<span class="bot-tag">${escapeHtml(l)}</span>`;
-                }).join(' ');
-
-                // 3. Dynamic Context Tags
-                let ctxTags = '';
-                if (ctx.container_name) ctxTags += `<span class="bot-tag">📦 ${escapeHtml(ctx.container_name)}</span> `;
-                if (ctx.ado_repo) ctxTags += `<span class="bot-tag">📁 ${escapeHtml(ctx.ado_repo)}</span> `;
-                if (ctx.ado_pipeline) ctxTags += `<span class="bot-tag">⚙️ ${escapeHtml(ctx.ado_pipeline)}</span> `;
-                if (ctx.vm_name) ctxTags += `<span class="bot-tag">🖥️ ${escapeHtml(ctx.vm_name)}</span> `;
-
-                const card = document.createElement('div');
-                card.className = 'bot-card';
-                card.id = `bot-card-${botId}`;
-                card.innerHTML = `
-                    <div class="bot-header">
-                        <div>
-                            <div class="bot-title">
-                                <span>🤖</span> ${escapeHtml(bot.name)}
-                            </div>
-                        </div>
-                        <span class="bot-status-pill ${isRunning ? 'active' : 'inactive'}" id="bot-status-${botId}" style="${isRunning ? 'background: rgba(34, 197, 94, 0.2); border: 1px solid #22c55e; color: #4ade80;' : 'background: rgba(148, 163, 184, 0.15); border: 1px solid #475569; color: #94a3b8;'}">
-                            <span class="pulse-dot" style="background: ${isRunning ? '#22c55e' : '#94a3b8'};"></span>
-                            ${isRunning ? `Active (${schedSummary}) 🟢` : 'Stopped ⚪'}
-                        </span>
-                    </div>
-
-                    <div class="bot-desc" style="margin-bottom: 6px;">${escapeHtml(bot.description || '')}</div>
-
-                    <!-- Prompt Placeholder Box with Copy Button -->
-                    <div class="bot-prompt-box" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px 12px; margin: 8px 0 10px 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <span style="font-size: 10.5px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px;">
-                                💬 Initial Prompt / Mission Instructions:
-                            </span>
-                            <button class="btn-chip-action" style="font-size: 10px; padding: 2px 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="copyBotPrompt('${botId}')" title="Copy initial prompt to clipboard">
-                                📋 Copy Prompt
-                            </button>
-                        </div>
-                        <div style="font-size: 11.5px; color: #cbd5e1; line-height: 1.45; font-family: var(--font-mono); white-space: pre-wrap; max-height: 75px; overflow-y: auto; background: rgba(0,0,0,0.35); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">${escapeHtml(bot.instructions || bot.description || 'No specific prompt recorded.')}</div>
-                    </div>
-
-                    <div class="bot-context-tags">
-                        ${schedTag}
-                        ${toolTags}
-                        ${ctxTags}
-                    </div>
-
-                    <div class="bot-footer">
-                        <div class="bot-last-run">
-                            <div><strong>Runs:</strong> ${bot.run_count || 0}</div>
-                            <div style="font-size: 10px; color: var(--text-muted);">${bot.last_run ? `Last: ${bot.last_run}` : 'Never executed'}</div>
-                        </div>
-
-                        <div class="bot-actions" style="display: flex; gap: 8px; align-items: center;">
-                            ${isRunning ? `
-                                <button class="btn-bot-action" style="background: #ef4444; color: white; border: 1px solid #dc2626; font-weight: 700; padding: 7px 14px; border-radius: 6px; cursor: pointer;" onclick="stopWatchdog('${botId}')">
-                                    ⏹️ Stop Watchdog
-                                </button>
-                            ` : `
-                                <button class="btn-bot-run" style="background: #10b981; color: white; border: none; font-weight: 700; padding: 7px 14px; border-radius: 6px; cursor: pointer;" onclick="startWatchdog('${botId}')">
-                                    ▶️ Start Watchdog
-                                </button>
-                            `}
-                            <button class="btn-bot-action" style="background: rgba(30, 41, 59, 0.8); border: 1px solid var(--border-color); color: #cbd5e1; padding: 7px 12px; border-radius: 6px; cursor: pointer;" onclick="runBotNow('${botId}')" title="Run single pass right now">
-                                ⚡ Trigger Once
-                            </button>
-                            <button class="btn-bot-action" style="background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; font-weight: 650; padding: 7px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;" onclick="openBotLogsModal('${botId}')">
-                                💻 Terminal
-                            </button>
-                            <button class="btn-bot-action btn-bot-delete" onclick="deleteBot('${botId}')" title="Delete Bot" style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #f87171; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
-                                🗑️
-                            </button>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-
-            // Update Metrics Counters
-            document.getElementById('metric-total-bots').textContent = botKeys.length;
-            document.getElementById('metric-active-bots').textContent = activeCount;
-            document.getElementById('metric-total-runs').textContent = totalRuns;
-            document.getElementById('metric-incidents').textContent = totalIncidents;
-        }
-
-        
-        async function startWatchdog(botId) {
-            const bot = allBots[botId] || {};
-            const sched = bot.schedule || {};
-            const intervalSec = sched.interval_seconds || bot.interval_seconds || (sched.interval_minutes ? sched.interval_minutes * 60 : 300);
-
-            try {
-                const res = await fetch(`/api/bots/${botId}/start_daemon`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        schedule: sched,
-                        interval_seconds: intervalSec
-                    })
-                });
+                const res = await fetch(`/api/bots/${botId}`, { method: 'DELETE' });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('🚀 Bot daemon started! Autonomous execution active.', 'success');
+                    showToast(`🗑 Bot '${botId}' deleted.`, 'info');
+                    if (agActiveBotId === botId) {
+                        agActiveBotId = null;
+                    }
                     await loadBots();
                 } else {
-                    showToast(`❌ Failed to start watchdog: ${data.error || 'Unknown error'}`, 'error');
+                    showToast(`❌ Failed to delete bot: ${data.error}`, 'error');
                 }
             } catch (e) {
-                showToast(`❌ Network error: ${e}`, 'error');
+                showToast("Failed to delete bot: " + e, 'error');
             }
         }
 
@@ -5655,66 +5483,44 @@
                 const res = await fetch(`/api/bots/${botId}/stop_daemon`, { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('⏹️ Watchdog stopped cleanly.', 'info');
+                    showToast('⏹️ Background loop stopped.', 'info');
                     await loadBots();
                 } else {
-                    showToast(`❌ Failed to stop watchdog: ${data.error || 'Unknown error'}`, 'error');
+                    showToast(`❌ Failed to stop loop: ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (e) {
                 showToast(`❌ Network error: ${e}`, 'error');
             }
         }
 
-        async function runBotNow(botId) {
-            const btn = document.getElementById(`btn-run-${botId}`);
-            const statusPill = document.getElementById(`bot-status-${botId}`);
-            
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = `⏳ Running...`;
-            }
-            if (statusPill) {
-                statusPill.className = 'bot-status-pill running';
-                statusPill.innerHTML = `🟡 Running Workflow...`;
-            }
-
+        async function startWatchdog(botId) {
+            const selectEl = document.getElementById('ag-loop-interval-select');
+            const intervalSec = selectEl ? parseInt(selectEl.value, 10) : 600;
             try {
-                const res = await fetch(`/api/bots/${botId}/run`, { method: 'POST' });
+                const res = await fetch(`/api/bots/${botId}/start_daemon`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interval_seconds: intervalSec })
+                });
                 const data = await res.json();
-                
-                // Refresh bots list
-                await loadBots();
-
-                // Open logs view to inspect RCA and ServiceNow ticket creation
-                openBotLogsModal(botId);
-
-            } catch (e) {
-                alert("Bot execution failed: " + e);
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = `▶️ Run Now`;
+                if (data.success) {
+                    showToast(`⚡ Started autonomous loop (${Math.round(intervalSec/60)}m interval)!`, 'success');
+                    await loadBots();
+                } else {
+                    showToast(`❌ Failed to start loop: ${data.error}`, 'error');
                 }
+            } catch (e) {
+                showToast(`❌ Error: ${e}`, 'error');
             }
         }
 
-        async function toggleBotStatus(botId) {
-            try {
-                await fetch(`/api/bots/${botId}/toggle`, { method: 'POST' });
-                await loadBots();
-            } catch (e) {
-                console.error("Failed to toggle bot status:", e);
-            }
-        }
-
-        async function deleteBot(botId) {
-            if (!confirm(`Are you sure you want to delete this bot (${botId})?`)) return;
-            try {
-                await fetch(`/api/bots/${botId}`, { method: 'DELETE' });
-                await loadBots();
-            } catch (e) {
-                alert("Failed to delete bot: " + e);
-            }
+        function copyBotPrompt(botId) {
+            const bot = allBots[botId];
+            if (!bot) return;
+            const promptText = bot.instructions || bot.description || '';
+            navigator.clipboard.writeText(promptText).then(() => {
+                showToast('📋 Initial Prompt copied to clipboard!', 'info');
+            });
         }
 
         

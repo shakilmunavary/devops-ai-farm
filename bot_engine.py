@@ -44,8 +44,63 @@ class BotRegistry:
         return os.path.join(self.bots_dir, safe_id)
 
     def _ensure_init(self):
-        # Only ensure directory exists. Zero auto-seeding.
+        # Auto-seed canonical production bots if none exist
         os.makedirs(self.bots_dir, exist_ok=True)
+        default_bots = [
+                {
+                    "id": "springboot_app_error_monitor",
+                    "name": "SpringBoot App Error Monitor & Auto-RCA",
+                    "description": "Monitors Azure App Service devops-vsp-sample-app-shakil for errors, logs ServiceNow incident, investigates ADO repo code, and resolves ticket with AI RCA.",
+                    "status": "active",
+                    "trigger_type": "on_demand",
+                    "instructions": "Monitor logs for devops-vsp-sample-app-shakil. Any ERROR in logs, check/create ServiceNow ticket with Short Description 'Spring Boot App Error', add note 'Incident found and SRE AI already started investigation', check code in ADO springboot-app repo main branch, analyze pipeline logs, find RCA, update RCA in ticket, and resolve ticket.",
+                    "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
+                    "context_config": {
+                        "app_service_name": "devops-vsp-sample-app-shakil",
+                        "resource_group": "rg-devops-uaenorth",
+                        "project": "AI-POC",
+                        "repo": "springboot-app",
+                        "branch": "main"
+                    }
+                },
+                {
+                    "id": "morning_scrum_status_bot",
+                    "name": "Daily Morning Scrum & 360° Standup Status",
+                    "description": "Aggregates 24-hour health across App Service, ServiceNow open/closed incidents, and Azure DevOps PRs & pipeline builds for daily engineering scrum.",
+                    "status": "active",
+                    "trigger_type": "on_demand",
+                    "instructions": "Inspect App Service health, query ServiceNow incidents in last 24h, list active PRs and pipeline builds in Azure DevOps, and generate a 360° Morning Scrum Briefing.",
+                    "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
+                    "context_config": {
+                        "app_service_name": "devops-vsp-sample-app-shakil",
+                        "resource_group": "rg-devops-uaenorth",
+                        "project": "AI-POC",
+                        "repo": "springboot-app",
+                        "branch": "main"
+                    }
+                },
+                {
+                    "id": "pr_quality_gatekeeper_bot",
+                    "name": "Pull Request Quality & Security Gatekeeper",
+                    "description": "Monitors incoming PRs in Azure DevOps, evaluates code security vulnerabilities, checks CI build pass rates, and logs audit tracking in ServiceNow.",
+                    "status": "active",
+                    "trigger_type": "on_demand",
+                    "instructions": "Inspect latest PRs and builds in Azure DevOps, run AI security & regression review on modified code, and sync audit status to ServiceNow.",
+                    "tools_required": ["azure_devops", "servicenow"],
+                    "context_config": {
+                        "project": "AI-POC",
+                        "repo": "springboot-app",
+                        "branch": "main"
+                    }
+                }
+            ]
+        for bot_item in default_bots:
+            b_folder = os.path.join(self.bots_dir, bot_item["id"])
+            os.makedirs(b_folder, exist_ok=True)
+            b_json_path = os.path.join(b_folder, "bot.json")
+            if not os.path.exists(b_json_path):
+                with open(b_json_path, "w", encoding="utf-8") as f:
+                    json.dump(bot_item, f, indent=2)
 
     def list_bots(self) -> Dict[str, Any]:
         """Loads all bot profiles from their individual folders."""
@@ -1382,8 +1437,48 @@ def _execute_deterministic_agent_fallback(
         })
         return t_res, p_data
 
+    # 0. Daily Morning Scrum & 360 DevOps Standup Briefing
+    if any(k in bot_name.lower() or k in instructions.lower() for k in ["scrum", "standup", "morning", "360", "daily briefing"]):
+        app_name = ctx.get("app_service_name") or ctx.get("app_name") or "devops-vsp-sample-app-shakil"
+        rg_name = ctx.get("resource_group") or "rg-devops-uaenorth"
+        ado_project = ctx.get("project") or "AI-POC"
+        ado_repo = ctx.get("repo") or ctx.get("repository") or "springboot-app"
+
+        # Step 1: Azure App Service Health Probe
+        _, app_data = _add_step("App Service Health Probe", "azure_app_service", "get_app_service_details", {"app_service_name": app_name, "resource_group": rg_name}, f"Azure App Service Health Probe ({app_name})")
+
+        # Step 2: 24h ServiceNow Incidents Check
+        _, sn_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "ORDERBYDESCsys_created_on", "sysparm_limit": 10}, "ServiceNow 24h Incident Query")
+
+        # Step 3: Azure DevOps Active Pull Requests
+        _, pr_data = _add_step("List Azure DevOps PRs", "azure_devops", "list_pull_requests", {"project": ado_project, "repository": ado_repo}, f"Azure DevOps Pull Requests ({ado_repo})")
+
+        # Step 4: Azure DevOps Pipeline Builds
+        _, build_data = _add_step("List Pipeline Builds", "azure_devops", "list_builds", {"project": ado_project, "top": 5}, f"Azure DevOps Pipeline Status ({ado_project})")
+
+        overall_status = "healthy"
+
+    # 0.5 Pull Request Quality & Security Gatekeeper
+    elif any(k in bot_name.lower() or k in instructions.lower() for k in ["gatekeeper", "pull request", "pr quality", "code review"]):
+        ado_project = ctx.get("project") or "AI-POC"
+        ado_repo = ctx.get("repo") or ctx.get("repository") or "springboot-app"
+
+        # Step 1: Query Active Pull Requests
+        _, pr_data = _add_step("List Azure DevOps PRs", "azure_devops", "list_pull_requests", {"project": ado_project, "repository": ado_repo}, f"Azure DevOps PR Queue ({ado_repo})")
+
+        # Step 2: Pipeline Build Verification
+        _, b_data = _add_step("List Pipeline Builds", "azure_devops", "list_builds", {"project": ado_project, "top": 3}, f"Azure DevOps Build Verification ({ado_project})")
+
+        # Step 3: Inspect Repository Code Quality
+        _, file_data = _add_step("Inspect Controller Code", "azure_devops", "get_file_content", {"project": ado_project, "repository": ado_repo, "path": "src/main/java/com/devops/sample/controller/AppController.java", "includeContent": True}, f"ADO Codebase Security Scan ({ado_repo})")
+
+        # Step 4: ServiceNow Audit & Compliance Check
+        _, sn_data = _add_step("ServiceNow Audit Query", "servicenow", "query_incidents", {"sysparm_query": "active=true^short_descriptionLIKEPR", "sysparm_limit": 5}, "ServiceNow PR Audit Check")
+
+        overall_status = "healthy"
+
     # 1. Azure App Service Health & Error Log Guardian Fallback (Prioritized for App Service Monitoring)
-    if any("azure_app_service" in s or "app_service" in s or "webapp" in s for s in tools_req) or ctx.get("app_service_name") or ctx.get("site_name"):
+    elif any("azure_app_service" in s or "app_service" in s or "webapp" in s for s in tools_req) or ctx.get("app_service_name") or ctx.get("site_name"):
         app_name = ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("site_name") or "devops-vsp-sample-app-shakil"
         rg_name = ctx.get("resource_group") or "rg-devops-uaenorth"
         ado_project = ctx.get("project") or "AI-POC"
