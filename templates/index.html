@@ -2541,6 +2541,9 @@
                 </div>
 
                 <div class="ag-action-controls">
+                    <button class="ag-mini-btn" id="ag-btn-copy-prompt" onclick="agCopyActiveBotPrompt()" style="padding: 7px 12px; font-weight: 700; color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.12);" title="Copy the exact prompt used to build this bot">
+                        📋 Copy Prompt
+                    </button>
                     <button class="btn-run-once" id="ag-btn-run-once" onclick="agTriggerActiveBotRun()">
                         <span>▶</span> Run Once
                     </button>
@@ -2572,6 +2575,9 @@
                 </button>
                 <button class="ag-tab-btn" id="ag-tab-context-btn" onclick="agSwitchMiddleTab('context')">
                     🎯 Target Context
+                </button>
+                <button class="ag-tab-btn" id="ag-tab-prompt-btn" onclick="agSwitchMiddleTab('prompt')">
+                    💬 Prompt & Instructions
                 </button>
             </div>
 
@@ -2619,6 +2625,25 @@
                     </thead>
                     <tbody id="ag-context-tbody"></tbody>
                 </table>
+            </div>
+
+            <!-- Prompt & Instructions View (Tab 4) -->
+            <div id="ag-prompt-view" style="display: none; flex: 1; overflow-y: auto; padding: 20px; background: var(--bg-base);">
+                <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 16px;">💬</span>
+                            <strong style="color: #38bdf8; font-size: 13.5px;">Initial Prompt & Mission Goal</strong>
+                        </div>
+                        <button class="ag-mini-btn" onclick="agCopyActiveBotPrompt()" style="background: rgba(56, 189, 248, 0.18); border-color: #38bdf8; color: #7dd3fc; font-weight: 700; padding: 5px 12px;">
+                            📋 Copy Full Prompt
+                        </button>
+                    </div>
+                    <p style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 10px;">
+                        This is the exact prompt and configuration used by the AI Architect to synthesize this bot's DAG workflow, tools, and telemetry triggers:
+                    </p>
+                    <pre id="ag-prompt-display" style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 14px; font-family: var(--font-mono); font-size: 12.5px; color: #e2e8f0; line-height: 1.55; white-space: pre-wrap; max-height: 450px; overflow-y: auto; user-select: text;"></pre>
+                </div>
             </div>
         </div>
 
@@ -4933,6 +4958,9 @@
                         <button class="ag-mini-btn" onclick="agToggleBotLoopDirect('${bId}')" title="Toggle background loop">
                             ${isRunning ? '⏹ Stop' : '⚡ Loop'}
                         </button>
+                        <button class="ag-mini-btn" onclick="copyBotPrompt('${bId}')" title="Copy initial prompt used to build this bot" style="color: #38bdf8;">
+                            📋 Prompt
+                        </button>
                         <button class="ag-mini-btn danger" onclick="deleteBot('${bId}')" title="Delete Bot" style="margin-left: auto;">
                             🗑
                         </button>
@@ -5127,6 +5155,12 @@
                 }
             }
 
+            // 5.5 Render Initial Prompt & Instructions Display
+            const promptDisplay = document.getElementById('ag-prompt-display');
+            if (promptDisplay) {
+                promptDisplay.textContent = bot.instructions || bot.description || 'No specific prompt recorded.';
+            }
+
             // 6. Render Right Pane: Generated Artifacts & Reports (Markdown via marked.js)
             const reportEl = document.getElementById('ag-report-content');
             const rcaTabBtn = document.getElementById('ag-art-tab-rca');
@@ -5282,22 +5316,41 @@
             }
         }
 
+        function agCopyActiveBotPrompt() {
+            if (!agActiveBotData) {
+                showToast('No bot selected.', 'info');
+                return;
+            }
+            const promptText = agActiveBotData.instructions || agActiveBotData.description || '';
+            if (!promptText) {
+                showToast('No initial prompt recorded for this bot.', 'info');
+                return;
+            }
+            navigator.clipboard.writeText(promptText).then(() => {
+                showToast('📋 Initial Bot Prompt copied to clipboard!', 'success');
+            });
+        }
+
         function agSwitchMiddleTab(tab) {
             const termBtn = document.getElementById('ag-tab-terminal-btn');
             const flowBtn = document.getElementById('ag-tab-workflow-btn');
             const ctxBtn = document.getElementById('ag-tab-context-btn');
+            const promptBtn = document.getElementById('ag-tab-prompt-btn');
 
             const termView = document.getElementById('ag-terminal-view');
             const flowView = document.getElementById('ag-workflow-view');
             const ctxView = document.getElementById('ag-context-view');
+            const promptView = document.getElementById('ag-prompt-view');
 
             if (termBtn) termBtn.classList.remove('active');
             if (flowBtn) flowBtn.classList.remove('active');
             if (ctxBtn) ctxBtn.classList.remove('active');
+            if (promptBtn) promptBtn.classList.remove('active');
 
             if (termView) termView.style.display = 'none';
             if (flowView) flowView.style.display = 'none';
             if (ctxView) ctxView.style.display = 'none';
+            if (promptView) promptView.style.display = 'none';
 
             if (tab === 'workflow') {
                 if (flowBtn) flowBtn.classList.add('active');
@@ -5305,6 +5358,9 @@
             } else if (tab === 'context') {
                 if (ctxBtn) ctxBtn.classList.add('active');
                 if (ctxView) ctxView.style.display = 'block';
+            } else if (tab === 'prompt') {
+                if (promptBtn) promptBtn.classList.add('active');
+                if (promptView) promptView.style.display = 'block';
             } else {
                 if (termBtn) termBtn.classList.add('active');
                 if (termView) termView.style.display = 'flex';
