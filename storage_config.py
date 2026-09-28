@@ -131,5 +131,23 @@ def init_persistent_storage():
             except Exception:
                 pass
 
+    # 3. Always sync / copy updated baseline server.py scripts into persistent SERVERS_DIR
+    baseline_servers_dir = os.path.join(BASE_DIR, "persistent_data", "mcp_servers")
+    if os.path.exists(baseline_servers_dir) and os.path.abspath(baseline_servers_dir) != os.path.abspath(SERVERS_DIR):
+        for s_folder in os.listdir(baseline_servers_dir):
+            src_s_dir = os.path.join(baseline_servers_dir, s_folder)
+            if os.path.isdir(src_s_dir):
+                dst_s_dir = os.path.join(SERVERS_DIR, s_folder)
+                os.makedirs(dst_s_dir, exist_ok=True)
+                src_server_py = os.path.join(src_s_dir, "server.py")
+                dst_server_py = os.path.join(dst_s_dir, "server.py")
+                if os.path.exists(src_server_py):
+                    try:
+                        shutil.copyfile(src_server_py, dst_server_py)
+                        logger.info(f"Synchronized updated server.py for '{s_folder}' into {dst_server_py}")
+                    except Exception as e:
+                        logger.warning(f"Could not sync server.py for {s_folder}: {e}")
+
 
 init_persistent_storage()
+
