@@ -38,6 +38,13 @@ logger = logging.getLogger("app")
 
 app = Flask(__name__, template_folder="templates")
 
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 # Auto-start embedded MCP Gateway background service
 try:
     gateway_mgr.start_gateway()
