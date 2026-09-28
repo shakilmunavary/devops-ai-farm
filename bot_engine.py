@@ -1455,6 +1455,56 @@ def build_react_tools_for_bot(tools_required: List[str]) -> List[Dict[str, Any]]
     return tools
 
 
+def find_matching_open_incident(incidents: list, context: dict = None) -> Optional[dict]:
+    """
+    Intelligently inspects a list of ServiceNow incidents and returns the first active
+    incident that matches the target application, repository, pipeline, or error description.
+    
+    Matching criteria:
+    1. Active Lifecycle State: active == True or state in ['1', '2', '3'] (New, In Progress, On Hold).
+       Excludes Resolved (6), Closed (7), or Canceled (8).
+    2. Semantic & Description Match: short_description or description contains:
+       - Target App Service name (e.g. 'devops-vsp-sample-app-shakil')
+       - Repository name (e.g. 'springboot-app')
+       - Pipeline name (e.g. 'springboot-app - app ci-cd')
+       - Domain keywords (e.g. 'spring boot', 'springboot')
+    """
+    if not isinstance(incidents, list) or not incidents:
+        return None
+
+    ctx = context or {}
+    app_name = str(ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("site_name") or "").lower()
+    repo_name = str(ctx.get("repo") or ctx.get("repository") or "").lower()
+    pipeline_name = str(ctx.get("pipeline_name") or ctx.get("pipeline") or "").lower()
+    bot_name = str(ctx.get("name") or "").lower()
+
+    # Build search tokens
+    search_tokens = [t for t in [app_name, repo_name, pipeline_name] if t and len(t) > 2]
+    if "spring" in app_name or "spring" in repo_name or "spring" in bot_name or not search_tokens:
+        search_tokens.extend(["spring boot", "springboot"])
+
+    for inc in incidents:
+        if not isinstance(inc, dict):
+            continue
+        
+        # State check: active and state not resolved/closed
+        is_active = str(inc.get("active", "")).lower() in ["true", "1"] or str(inc.get("state", "")) in ["1", "2", "3"]
+        if not is_active:
+            continue
+
+        short_desc = str(inc.get("short_description", "")).lower()
+        desc = str(inc.get("description", "")).lower()
+        combined_text = f"{short_desc} {desc}"
+
+        if search_tokens:
+            if any(token in combined_text for token in search_tokens):
+                return inc
+        else:
+            return inc
+
+    return None
+
+
 def _execute_deterministic_agent_fallback(
     bot: Dict[str, Any],
     trigger_reason: str,
@@ -1567,21 +1617,15 @@ def _execute_deterministic_agent_fallback(
             overall_status = "incident_created"
             logger.info(f"🚨 Fallback Engine: Detected runtime anomaly/error on App Service '{app_name}'")
 
-            # Step 3: Query ServiceNow for deduplication (active open incidents)
+            # Step 3: Query ServiceNow for deduplication (active open incidents for the same application)
             existing_sys_id = None
             if any("servicenow" in s for s in tools_req):
-                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "active=true^stateIN1,2,3^ORDERBYDESCsys_created_on", "sysparm_limit": 5}, "ServiceNow Incident Deduplication Check")
+                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "active=true^stateIN1,2,3^ORDERBYDESCsys_created_on", "sysparm_limit": 10}, "ServiceNow Incident Deduplication Check")
                 active_incs = sn_query_data.get("result") or [] if isinstance(sn_query_data, dict) else []
-                if active_incs and isinstance(active_incs, list):
-                    matching_incs = [
-                        inc for inc in active_incs 
-                        if isinstance(inc, dict) and (
-                            str(inc.get("active", "")).lower() == "true" or inc.get("state") in ["1", "2", "3"]
-                        )
-                    ]
-                    if matching_incs:
-                        existing_sys_id = matching_incs[0].get("sys_id") or matching_incs[0].get("number")
-                        logger.info(f"🛡️ Deduplication: Active ticket {matching_incs[0].get('number')} found.")
+                matching_inc = find_matching_open_incident(active_incs, ctx)
+                if matching_inc:
+                    existing_sys_id = matching_inc.get("sys_id") or matching_inc.get("number")
+                    logger.info(f"🛡️ Deduplication: Active matching ticket {matching_inc.get('number')} found for '{app_name}'. Reusing incident.")
 
             # Step 4: Create Incident ONLY if no active open incident exists
             incident_id = existing_sys_id
@@ -1700,11 +1744,12 @@ def _execute_deterministic_agent_fallback(
             # Step 2: Query ServiceNow for deduplication
             existing_sys_id = None
             if any("servicenow" in s for s in tools_req):
-                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"query": "active=true^short_descriptionLIKESpring Boot App Error"}, "ServiceNow Incident Deduplication Check")
+                _, sn_query_data = _add_step("Query ServiceNow Incidents", "servicenow", "query_incidents", {"sysparm_query": "active=true^stateIN1,2,3^ORDERBYDESCsys_created_on", "sysparm_limit": 10}, "ServiceNow Incident Deduplication Check")
                 active_incs = sn_query_data.get("result") or [] if isinstance(sn_query_data, dict) else []
-                if active_incs and isinstance(active_incs, list) and len(active_incs) > 0:
-                    existing_sys_id = active_incs[0].get("sys_id") or active_incs[0].get("number")
-                    logger.info(f"🛡️ Deduplication: Active ticket {active_incs[0].get('number')} found.")
+                matching_inc = find_matching_open_incident(active_incs, ctx)
+                if matching_inc:
+                    existing_sys_id = matching_inc.get("sys_id") or matching_inc.get("number")
+                    logger.info(f"🛡️ Deduplication: Active ticket {matching_inc.get('number')} found for build #{b_num}. Reusing incident.")
 
             # Step 3: Create Incident if not already existing
             incident_id = existing_sys_id
@@ -1858,15 +1903,17 @@ OPERATIONAL RULES:
    - DO NOT create any tickets in ServiceNow when the system is healthy.
 2. Anomaly / Failure Workflow & Single Incident Lifecycle:
    - If a build has failed or a runtime error is detected:
-     a. Check active incidents in ServiceNow (servicenow__query_incidents) to verify if an open ticket already exists (state 1, 2, or 3).
-     b. If an active ticket already exists, REUSE that ticket. DO NOT create a duplicate ticket.
-     c. If NO active ticket exists, create EXACTLY ONE incident (servicenow__create_incident) with short_description="Spring Boot App Error" (or matching mission instructions).
-     d. Note the returned sys_id (32-character hex ID) and ticket number (e.g. INC0010145).
-     e. Add an initial work note to that ticket using servicenow__add_work_note with sys_id=<sys_id> and work_notes="AI is investigating the issue".
-     f. Deeply inspect the build timeline, error logs, and repository source code (azure_devops__get_file_content).
-     g. Synthesize an in-depth Root Cause Analysis (built_in__generate_ai_rca).
-     h. Update the SAME ServiceNow incident work notes with the full RCA using servicenow__add_work_note with sys_id=<sys_id>.
-     i. Mark the incident resolved using servicenow__resolve_incident with sys_id=<sys_id>.
+     a. Check active incidents in ServiceNow (servicenow__query_incidents) to verify if an open ticket already exists.
+     b. DEDUPLICATION & DESCRIPTION MATCHING:
+        - Inspect the `short_description` and `description` of returned active tickets (state 1, 2, or 3).
+        - If an active ticket already exists matching this target application, repo, or error description (e.g., mentioning '{ctx.get('app_service_name', 'devops-vsp-sample-app-shakil')}' or '{ctx.get('repo', 'springboot-app')}'), REUSE that ticket sys_id! DO NOT create a duplicate ticket!
+        - If NO matching active ticket exists for this specific app/issue, create EXACTLY ONE incident (servicenow__create_incident) with short_description="Spring Boot App Error - {ctx.get('app_service_name', 'devops-vsp-sample-app-shakil')}".
+     c. Note the returned sys_id (32-character hex ID) and ticket number (e.g. INC0010145).
+     d. Add an initial work note to that ticket using servicenow__add_work_note with sys_id=<sys_id> and work_notes="Incident found and SRE AI already started investigation".
+     e. Deeply inspect the build timeline, error logs, and repository source code (azure_devops__get_file_content).
+     f. Synthesize an in-depth Root Cause Analysis (built_in__generate_ai_rca).
+     g. Update the SAME ServiceNow incident work notes with the full RCA using servicenow__add_work_note with sys_id=<sys_id>.
+     h. Mark the incident resolved using servicenow__resolve_incident with sys_id=<sys_id>.
 3. CRITICAL SINGLE-TICKET RULE: NEVER call servicenow__create_incident more than once in a single run! All updates (notes, investigation, RCA, resolution) MUST use servicenow__add_work_note and servicenow__resolve_incident with the SAME sys_id.
 4. Conclude with a concise technical summary once all actions are completed."""
 
@@ -2095,11 +2142,11 @@ OPERATIONAL RULES:
                 elif tool_name == "query_incidents" and isinstance(parsed_data, dict):
                     incs = parsed_data.get("result") or []
                     if isinstance(incs, list):
-                        active_list = [i for i in incs if isinstance(i, dict) and (str(i.get("active", "")).lower() == "true" or str(i.get("state")) in ["1", "2", "3"])]
-                        if active_list:
-                            active_incident_sys_id = active_list[0].get("sys_id") or active_incident_sys_id
-                            active_incident_num = active_list[0].get("number") or active_incident_num
-                            logger.info(f"🛡️ ReAct Guard: Found active open incident {active_incident_num} ({active_incident_sys_id}). Will reuse this incident.")
+                        matching_inc = find_matching_open_incident(incs, ctx)
+                        if matching_inc:
+                            active_incident_sys_id = matching_inc.get("sys_id") or active_incident_sys_id
+                            active_incident_num = matching_inc.get("number") or active_incident_num
+                            logger.info(f"🛡️ ReAct Guard: Found active matching incident {active_incident_num} ({active_incident_sys_id}). Will reuse this incident.")
                 elif tool_name == "list_builds" and isinstance(parsed_data, dict):
                     builds = parsed_data.get("value") or parsed_data.get("builds") or []
                     if builds and (builds[0].get("result") == "failed" or builds[0].get("status") == "failed"):
@@ -2422,22 +2469,15 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     if step_tool == "create_incident":
                         existing_inc = execution_state.get("incident")
                         if not existing_inc or not isinstance(existing_inc, dict) or not existing_inc.get("sys_id"):
-                            target_app = ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("project") or bot_name
                             sn_q_res = execute_mcp_tool_on_gateway("servicenow", "query_incidents", {
                                 "sysparm_query": "active=true^stateIN1,2,3^ORDERBYDESCsys_created_on",
-                                "sysparm_limit": 5
+                                "sysparm_limit": 10
                             })
                             q_data = sn_q_res.get("data") or {}
                             q_results = q_data.get("result") or [] if isinstance(q_data, dict) else []
-                            if q_results and isinstance(q_results, list):
-                                matching = [
-                                    inc for inc in q_results 
-                                    if isinstance(inc, dict) and (
-                                        str(inc.get("active", "")).lower() == "true" or inc.get("state") in ["1", "2", "3"]
-                                    )
-                                ]
-                                if matching:
-                                    existing_inc = matching[0]
+                            matching_inc = find_matching_open_incident(q_results, ctx)
+                            if matching_inc:
+                                existing_inc = matching_inc
 
                         if existing_inc and isinstance(existing_inc, dict) and existing_inc.get("sys_id"):
                             inc_num = existing_inc.get("number", "INC")
@@ -2560,14 +2600,14 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                 elif step_tool == "query_incidents" and isinstance(parsed_data, dict):
                     inc_list = parsed_data.get("result") or parsed_data.get("incidents") or []
                     execution_state["incidents"] = inc_list
-                    if len(inc_list) > 0:
-                        existing_inc = inc_list[0]
-                        execution_state["incident"] = existing_inc
-                        execution_state["incident_sys_id"] = existing_inc.get("sys_id")
-                        execution_state["incident_number"] = existing_inc.get("number")
+                    matching_inc = find_matching_open_incident(inc_list, ctx)
+                    if matching_inc:
+                        execution_state["incident"] = matching_inc
+                        execution_state["incident_sys_id"] = matching_inc.get("sys_id")
+                        execution_state["incident_number"] = matching_inc.get("number")
                         execution_state["has_duplicate_incident"] = True
-                        step_record["details"] = f"Found {len(inc_list)} active incident(s) in ServiceNow ({existing_inc.get('number', 'INC')}). Deduplication active."
-                        logger.info(f"🛡️ Active incident already exists: {existing_inc.get('number')}")
+                        step_record["details"] = f"Found active matching incident in ServiceNow ({matching_inc.get('number', 'INC')}). Deduplication active."
+                        logger.info(f"🛡️ Active matching incident already exists: {matching_inc.get('number')}")
 
                 elif step_tool == "create_incident" and isinstance(parsed_data, dict):
                     inc_obj = parsed_data.get("result") or parsed_data.get("incident") or parsed_data
