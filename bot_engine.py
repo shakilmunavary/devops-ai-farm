@@ -95,11 +95,11 @@ Continuously observe container health and live Kudu error logs. If fatal errors 
 Workflow Execution Steps:
 1. Check Azure App Service container health and fetch live Kudu application logs.
 2. Detect runtime exceptions and strip out noise.
-3. Deduplicate ServiceNow tickets to ensure no duplicate incidents are created for the same active failure.
-4. If no open ticket exists, create a P2 Incident in ServiceNow and add initial investigation note.
+3. Deduplicate ServiceNow tickets: Query active open incidents (state=1, 2, or 3) to ensure no duplicate incidents are created for the same active failure.
+4. If an active ticket already exists, reuse that ticket. If no open ticket exists, create EXACTLY ONE P2 Incident in ServiceNow (capturing its sys_id and ticket number) and add an initial investigation work note to that ticket.
 5. Inspect repository source code in Azure DevOps (AppController.java) and recent build traces.
 6. Perform Deep Mistral AI Root Cause Analysis (RCA).
-7. Update ServiceNow incident work notes with the full RCA and mark incident resolved."""
+7. Update the SAME ServiceNow incident work notes with the full RCA and mark the incident resolved (state=6). Do NOT create separate or duplicate tickets for each step."""
 
         default_bots = [
             {
@@ -1853,18 +1853,22 @@ ENVIRONMENT CONTEXT:
 
 OPERATIONAL RULES:
 1. Gating & Health Check:
-   - First inspect the primary telemetry (e.g. list builds, get app service logs, or check VM status).
+   - First inspect the primary telemetry (e.g. get app service logs, list builds, or check VM status).
    - If the build status is 'succeeded' / 'completed' or no fatal errors exist, report that the system is fully healthy and operational.
    - DO NOT create any tickets in ServiceNow when the system is healthy.
-2. Anomaly / Failure Workflow:
-   - If a build has failed or an error is detected:
-     a. Check active incidents in ServiceNow (servicenow__query_incidents) to avoid duplicates.
-     b. If no active incident exists for this failure, create a ServiceNow incident (servicenow__create_incident) with short_description="Spring Boot App Error" (or matching instructions).
-     c. Add an initial work note (servicenow__add_work_notes) saying 'AI is investigating the issue'.
-     d. Deeply inspect the build timeline, error logs, and repository source code (azure_devops__get_build_timeline or azure_devops__get_file_content).
-     e. Synthesize an in-depth Root Cause Analysis (built_in__generate_ai_rca).
-     f. Update the ServiceNow incident with the RCA response via servicenow__add_work_notes.
-3. Conclude with a concise technical summary once all actions are completed."""
+2. Anomaly / Failure Workflow & Single Incident Lifecycle:
+   - If a build has failed or a runtime error is detected:
+     a. Check active incidents in ServiceNow (servicenow__query_incidents) to verify if an open ticket already exists (state 1, 2, or 3).
+     b. If an active ticket already exists, REUSE that ticket. DO NOT create a duplicate ticket.
+     c. If NO active ticket exists, create EXACTLY ONE incident (servicenow__create_incident) with short_description="Spring Boot App Error" (or matching mission instructions).
+     d. Note the returned sys_id (32-character hex ID) and ticket number (e.g. INC0010145).
+     e. Add an initial work note to that ticket using servicenow__add_work_note with sys_id=<sys_id> and work_notes="AI is investigating the issue".
+     f. Deeply inspect the build timeline, error logs, and repository source code (azure_devops__get_file_content).
+     g. Synthesize an in-depth Root Cause Analysis (built_in__generate_ai_rca).
+     h. Update the SAME ServiceNow incident work notes with the full RCA using servicenow__add_work_note with sys_id=<sys_id>.
+     i. Mark the incident resolved using servicenow__resolve_incident with sys_id=<sys_id>.
+3. CRITICAL SINGLE-TICKET RULE: NEVER call servicenow__create_incident more than once in a single run! All updates (notes, investigation, RCA, resolution) MUST use servicenow__add_work_note and servicenow__resolve_incident with the SAME sys_id.
+4. Conclude with a concise technical summary once all actions are completed."""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -1874,6 +1878,8 @@ OPERATIONAL RULES:
     steps_log = []
     step_outputs = []
     overall_status = "healthy"
+    active_incident_sys_id = None
+    active_incident_num = None
     max_turns = 8
     turn = 0
     final_summary = ""
@@ -2030,6 +2036,27 @@ OPERATIONAL RULES:
                     if "sysparm_query" not in args and "query" in args:
                         args["sysparm_query"] = args.pop("query")
 
+                    if "work_note" in args and "work_notes" not in args:
+                        args["work_notes"] = args.pop("work_note")
+
+                    # Auto-inject active session incident sys_id if missing or placeholder
+                    if tool_name in ["add_work_note", "update_incident", "resolve_incident", "close_incident", "get_incident"]:
+                        curr_sid = str(args.get("sys_id") or args.get("incident_id") or "").strip()
+                        if not curr_sid or any(d in curr_sid.lower() for d in ["your-", "default", "<sys", "placeholder", "undefined", "null"]):
+                            if active_incident_sys_id:
+                                args["sys_id"] = active_incident_sys_id
+                        elif curr_sid and active_incident_num and curr_sid == active_incident_num:
+                            args["sys_id"] = active_incident_sys_id
+
+                    # STRICT DEDUPLICATION GUARD:
+                    # If create_incident is called when an incident is ALREADY active in this session, divert to add_work_note on the existing incident
+                    if tool_name == "create_incident" and active_incident_sys_id:
+                        logger.info(f"🛡️ ReAct Guard: Duplicate create_incident diverted to add_work_note on existing incident {active_incident_num or active_incident_sys_id}")
+                        tool_name = "add_work_note"
+                        func_name = "servicenow__add_work_note"
+                        wn_text = args.get("work_notes") or args.get("description") or args.get("short_description") or "AI incident update"
+                        args = {"sys_id": active_incident_sys_id, "work_notes": wn_text}
+
                 step_record = {
                     "step": step_num,
                     "name": f"{srv_id}.{tool_name}",
@@ -2054,13 +2081,30 @@ OPERATIONAL RULES:
                     step_record["details"] = f"Probe notice: {raw_out[:180].replace(chr(10), ' ')}"
                     step_record["mcp_output"] = raw_out[:1500]
 
-                # Status tracking
+                # Status & Incident Tracking
                 if tool_name == "create_incident" and is_success:
                     overall_status = "incident_created"
+                    if isinstance(parsed_data, dict):
+                        res_data = parsed_data.get("result")
+                        if isinstance(res_data, list) and res_data:
+                            res_data = res_data[0]
+                        if isinstance(res_data, dict):
+                            active_incident_sys_id = res_data.get("sys_id") or active_incident_sys_id
+                            active_incident_num = res_data.get("number") or active_incident_num
+                            logger.info(f"🛡️ ReAct Guard: Created incident {active_incident_num} ({active_incident_sys_id})")
+                elif tool_name == "query_incidents" and isinstance(parsed_data, dict):
+                    incs = parsed_data.get("result") or []
+                    if isinstance(incs, list):
+                        active_list = [i for i in incs if isinstance(i, dict) and (str(i.get("active", "")).lower() == "true" or str(i.get("state")) in ["1", "2", "3"])]
+                        if active_list:
+                            active_incident_sys_id = active_list[0].get("sys_id") or active_incident_sys_id
+                            active_incident_num = active_list[0].get("number") or active_incident_num
+                            logger.info(f"🛡️ ReAct Guard: Found active open incident {active_incident_num} ({active_incident_sys_id}). Will reuse this incident.")
                 elif tool_name == "list_builds" and isinstance(parsed_data, dict):
                     builds = parsed_data.get("value") or parsed_data.get("builds") or []
                     if builds and (builds[0].get("result") == "failed" or builds[0].get("status") == "failed"):
                         overall_status = "incident_created"
+
 
                 step_outputs.append({
                     "step": step_num,

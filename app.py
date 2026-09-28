@@ -506,15 +506,11 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         if "work_note" in args and "work_notes" not in args:
             args["work_notes"] = args.pop("work_note")
 
-        # Check for incident identifier
+        # Map incident identifiers
         inc_val = args.get("incident_id") or args.get("number") or args.get("sys_id") or args.get("id")
-        if inc_val and (str(inc_val).upper().startswith("INC") or len(str(inc_val)) != 32):
-            if "/table/incident" in target_endpoint:
-                target_endpoint = "/api/now/table/incident"
-                args.pop("incident_id", None)
-                args.pop("sys_id", None)
-                args.pop("id", None)
-                args["sysparm_query"] = f"number={{inc_val}}"
+        if inc_val:
+            args["sys_id"] = str(inc_val).strip()
+            args["incident_id"] = str(inc_val).strip()
 
     # Domain specific parameter extractions
     vm_val = args.get("vm_name") or args.get("virtual_machine_name") or args.get("vmName") or args.get("target_vm") or args.get("name") or ""
@@ -572,9 +568,10 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
     if repo_val:
         target_endpoint = re.sub(r'\\{{(?:repository(?:_?id)?|repositoryId|repo(?:_?name)?)\\}}', lambda m: str(repo_val), target_endpoint, flags=re.IGNORECASE)
 
-    # Azure ARM: Auto-format ARM endpoint and API version (only for Azure ARM, not Azure DevOps)
+    # Platform detection
     is_ado = any(w in srv_lower for w in ["azure_devops", "azure-devops", "devops", "ado"])
     is_arm = not is_ado and any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"])
+    is_snow = any(w in srv_lower for w in ["servicenow", "service_now", "snow"])
 
     # Clean /health and /logs endpoints to canonical Azure ARM site resource
     if is_arm and any(w in srv_lower for w in ["app_service", "appservice", "web"]):
@@ -782,8 +779,38 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
         except Exception:
             pass
 
+    # ServiceNow Parameter Normalizations
+    if is_snow:
+        if "work_note" in clean_args and "work_notes" not in clean_args:
+            clean_args["work_notes"] = clean_args.pop("work_note")
+        if "resolution_notes" in clean_args and "close_notes" not in clean_args:
+            clean_args["close_notes"] = clean_args.pop("resolution_notes")
+        if "resolution_code" in clean_args and "close_code" not in clean_args:
+            clean_args["close_code"] = clean_args.pop("resolution_code")
+        if "state" in clean_args and str(clean_args["state"]).lower() in ["resolved", "resolve", "closed", "6"]:
+            clean_args["state"] = "6"
+            if "close_code" not in clean_args:
+                clean_args["close_code"] = "Solution provided"
+            if "close_notes" not in clean_args:
+                clean_args["close_notes"] = "Resolved by Autonomous AI Bot"
+
     try:
         with httpx.Client(verify=False, auth=auth, headers=headers, timeout=25.0, follow_redirects=True) as client:
+            # ServiceNow: Auto-resolve human ticket number (e.g. INC0010145) to 32-char sys_id if present in URL
+            if is_snow and "/incident/" in url:
+                path_parts = url.rstrip("/").split("/")
+                last_seg = path_parts[-1]
+                if last_seg.upper().startswith("INC") or (len(last_seg) < 32 and not last_seg.startswith("?")):
+                    try:
+                        parent_url = "/".join(path_parts[:-1])
+                        l_res = client.get(parent_url, params={{"sysparm_query": f"number={{last_seg}}", "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
+                        if l_res.status_code in [200, 201]:
+                            l_items = l_res.json().get("result", [])
+                            if l_items and l_items[0].get("sys_id"):
+                                url = f"{{parent_url}}/{{l_items[0]['sys_id']}}"
+                    except Exception:
+                        pass
+
             if "{method}" == "GET":
                 if api_ver and "api-version" not in clean_args:
                     clean_args["api-version"] = api_ver
@@ -821,13 +848,49 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
                 if api_ver and "api-version" not in clean_args:
                     clean_args["api-version"] = api_ver
                 res = client.delete(url, params=clean_args)
+                if res.status_code == 404 and is_snow and "/incident/" in url:
+                    try:
+                        path_parts = url.rstrip("/").split("/")
+                        last_seg = path_parts[-1]
+                        parent_url = "/".join(path_parts[:-1])
+                        l_res = client.get(parent_url, params={{"sysparm_query": f"number={{last_seg}}", "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
+                        if l_res.status_code in [200, 201]:
+                            l_items = l_res.json().get("result", [])
+                            if l_items and l_items[0].get("sys_id"):
+                                res = client.delete(f"{{parent_url}}/{{l_items[0]['sys_id']}}", params=clean_args)
+                    except Exception:
+                        pass
             elif "{method}" == "PUT":
                 if any(w in srv_lower for w in ["servicenow", "snow"]):
                     res = client.patch(url, params=query_params, json=clean_args if clean_args else None)
+                    if res.status_code == 404 and "/incident/" in url:
+                        try:
+                            path_parts = url.rstrip("/").split("/")
+                            last_seg = path_parts[-1]
+                            parent_url = "/".join(path_parts[:-1])
+                            l_res = client.get(parent_url, params={{"sysparm_query": f"number={{last_seg}}", "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
+                            if l_res.status_code in [200, 201]:
+                                l_items = l_res.json().get("result", [])
+                                if l_items and l_items[0].get("sys_id"):
+                                    res = client.patch(f"{{parent_url}}/{{l_items[0]['sys_id']}}", params=query_params, json=clean_args if clean_args else None)
+                        except Exception:
+                            pass
                 else:
                     res = client.put(url, params=query_params, json=clean_args if clean_args else None)
             elif "{method}" == "PATCH":
                 res = client.patch(url, params=query_params, json=clean_args if clean_args else None)
+                if res.status_code == 404 and is_snow and "/incident/" in url:
+                    try:
+                        path_parts = url.rstrip("/").split("/")
+                        last_seg = path_parts[-1]
+                        parent_url = "/".join(path_parts[:-1])
+                        l_res = client.get(parent_url, params={{"sysparm_query": f"number={{last_seg}}", "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
+                        if l_res.status_code in [200, 201]:
+                            l_items = l_res.json().get("result", [])
+                            if l_items and l_items[0].get("sys_id"):
+                                res = client.patch(f"{{parent_url}}/{{l_items[0]['sys_id']}}", params=query_params, json=clean_args if clean_args else None)
+                    except Exception:
+                        pass
             else:
                 res = client.post(url, params=query_params, json=clean_args if clean_args else None)
 
