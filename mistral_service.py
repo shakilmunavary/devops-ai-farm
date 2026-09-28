@@ -1509,6 +1509,13 @@ def chat_with_bot_architect(user_message: str, history: List[Dict[str, str]], se
                     "interval_minutes": max(1, int(bp.get("interval_seconds", 300) // 60)),
                     "interval_seconds": bp.get("interval_seconds", 300)
                 }
+            # Always preserve the full original verbatim user prompt
+            full_prompt = user_message
+            for h in history or []:
+                if isinstance(h, dict) and h.get("role") == "user" and len(h.get("content", "")) > len(full_prompt):
+                    full_prompt = h["content"]
+            bp["raw_prompt"] = full_prompt
+            bp["prompt"] = full_prompt
             return parsed
 
         raise ValueError(parsed.get("reply", "No blueprint in model response"))
@@ -1595,6 +1602,8 @@ def chat_with_bot_architect(user_message: str, history: List[Dict[str, str]], se
             "id": bot_id,
             "name": bot_name,
             "description": bot_desc,
+            "raw_prompt": user_message,
+            "prompt": user_message,
             "trigger_type": "interval",
             "interval_seconds": 300,
             "schedule": {

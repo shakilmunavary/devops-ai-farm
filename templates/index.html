@@ -5854,6 +5854,8 @@
                 // If Blueprint is ready, render it
                 if (data.blueprint) {
                     currentSynthesizedBlueprint = data.blueprint;
+                    if (!currentSynthesizedBlueprint.raw_prompt) currentSynthesizedBlueprint.raw_prompt = text;
+                    if (!currentSynthesizedBlueprint.prompt) currentSynthesizedBlueprint.prompt = text;
                     renderBlueprintCard(data.blueprint);
                     const deployBtn = document.getElementById('btn-deploy-bot');
                     deployBtn.style.opacity = '1';

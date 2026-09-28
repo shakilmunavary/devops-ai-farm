@@ -203,6 +203,18 @@ Workflow Execution Steps:
                             bot_data.setdefault("run_history", [])
                             bot_data.setdefault("run_count", 0)
 
+                        # Load full prompt from prompt.txt if available
+                        prompt_txt_path = os.path.join(folder_path, "prompt.txt")
+                        if os.path.exists(prompt_txt_path):
+                            try:
+                                with open(prompt_txt_path, "r", encoding="utf-8") as pf:
+                                    p_txt = pf.read().strip()
+                                    if p_txt:
+                                        bot_data["raw_prompt"] = p_txt
+                                        bot_data["prompt"] = p_txt
+                            except Exception:
+                                pass
+
                         bot_data["is_running"] = daemon_manager.is_running(bot_id)
                         bots[bot_id] = bot_data
                 except Exception as e:
@@ -231,6 +243,19 @@ Workflow Execution Steps:
             else:
                 bot_data["run_history"] = []
                 bot_data["run_count"] = 0
+
+            # Load full prompt from prompt.txt if available
+            prompt_txt_path = os.path.join(folder_path, "prompt.txt")
+            if os.path.exists(prompt_txt_path):
+                try:
+                    with open(prompt_txt_path, "r", encoding="utf-8") as pf:
+                        p_txt = pf.read().strip()
+                        if p_txt:
+                            bot_data["raw_prompt"] = p_txt
+                            bot_data["prompt"] = p_txt
+                except Exception:
+                    pass
+
             bot_data["is_running"] = daemon_manager.is_running(bot_id)
             return bot_data
         except Exception as e:
@@ -263,17 +288,26 @@ Workflow Execution Steps:
             bot_data["last_run"] = history[0].get("timestamp")
             bot_data["last_status"] = history[0].get("status")
 
-        # 1. Write bot.json
+        # 1. Write prompt.txt (verbatim prompt)
+        full_prompt_str = bot_data.get("raw_prompt") or bot_data.get("prompt") or bot_data.get("instructions") or ""
+        if full_prompt_str:
+            prompt_txt_path = os.path.join(folder_path, "prompt.txt")
+            with open(prompt_txt_path, "w", encoding="utf-8") as pf:
+                pf.write(full_prompt_str)
+            bot_data["raw_prompt"] = full_prompt_str
+            bot_data["prompt"] = full_prompt_str
+
+        # 2. Write bot.json
         bot_json_path = os.path.join(folder_path, "bot.json")
         with open(bot_json_path, "w", encoding="utf-8") as f:
             json.dump(bot_data, f, indent=2)
 
-        # 2. Write history.json
+        # 3. Write history.json
         hist_path = os.path.join(folder_path, "history.json")
         with open(hist_path, "w", encoding="utf-8") as hf:
             json.dump(history, hf, indent=2)
 
-        # 3. Write standalone workflow.py script ONLY if custom workflow code was provided
+        # 4. Write standalone workflow.py script ONLY if custom workflow code was provided
         workflow_code = bot_data.pop("workflow_code", None)
         workflow_py_path = os.path.join(folder_path, "workflow.py")
         if workflow_code and len(workflow_code.strip()) > 30:
@@ -333,12 +367,22 @@ Workflow Execution Steps:
         daemon_manager.stop(bot_id)
         daemon_manager.stop(safe_id)
         import shutil
-        for base_b in [self.bots_dir, os.path.join(BASE_DIR, "mcp_bots")]:
+        target_dirs = [
+            self.bots_dir,
+            os.path.join(BASE_DIR, "mcp_bots"),
+            os.path.join(BASE_DIR, "persistent_data", "mcp_bots"),
+            "/home/site/wwwroot/persistent_data/mcp_bots",
+            "/home/site/wwwroot/mcp_bots"
+        ]
+        for base_b in target_dirs:
+            if not base_b or not os.path.exists(base_b):
+                continue
             for folder_candidate in [bot_id, safe_id]:
                 folder_path = os.path.join(base_b, folder_candidate)
                 if os.path.exists(folder_path):
                     try:
                         shutil.rmtree(folder_path, ignore_errors=True)
+                        logger.info(f"🗑️ Purged bot folder on delete: {folder_path}")
                     except Exception as e:
                         logger.error(f"Error removing bot directory {folder_path}: {e}")
         return True
