@@ -796,18 +796,36 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
 
     try:
         with httpx.Client(verify=False, auth=auth, headers=headers, timeout=25.0, follow_redirects=True) as client:
-            # ServiceNow: Auto-resolve human ticket number (e.g. INC0010145) to 32-char sys_id if present in URL
-            if is_snow and "/incident/" in url:
+            # ServiceNow: Auto-resolve human ticket number (e.g. INC0010145) or missing sys_id for Table API updates
+            if is_snow and ("/incident" in url or "/incident/" in url):
                 path_parts = url.rstrip("/").split("/")
                 last_seg = path_parts[-1]
-                if last_seg.upper().startswith("INC") or (len(last_seg) < 32 and not last_seg.startswith("?")):
+                parent_url = "/".join(path_parts[:-1]) if "/incident/" in url else url.rstrip("/")
+
+                # Case 1: URL ends with /incident or /incident/ on PATCH/PUT without a sys_id in URL
+                if ("{method}" in ["PATCH", "PUT"] or "{fn_name}" in ["add_work_note", "update_incident", "resolve_incident", "close_incident"]) and last_seg.lower() == "incident":
+                    target_num_or_id = args.get("sys_id") or args.get("incident_id") or args.get("number") or args.get("id")
+                    if target_num_or_id and len(str(target_num_or_id)) == 32 and not str(target_num_or_id).upper().startswith("INC"):
+                        url = f"{parent_url}/{target_num_or_id}"
+                    else:
+                        try:
+                            s_query = f"number={target_num_or_id}" if target_num_or_id else "active=true^ORDERBYDESCsys_created_on"
+                            l_res = client.get(f"{parent_url}", params={{"sysparm_query": s_query, "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
+                            if l_res.status_code in [200, 201]:
+                                l_items = l_res.json().get("result", [])
+                                if l_items and l_items[0].get("sys_id"):
+                                    url = f"{parent_url}/{l_items[0]['sys_id']}"
+                        except Exception:
+                            pass
+
+                # Case 2: URL ends with INC number (e.g. /incident/INC0010145) -> resolve to 32-char hex sys_id
+                elif last_seg.upper().startswith("INC") or (len(last_seg) < 32 and not last_seg.startswith("?")):
                     try:
-                        parent_url = "/".join(path_parts[:-1])
-                        l_res = client.get(parent_url, params={{"sysparm_query": f"number={{last_seg}}", "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
+                        l_res = client.get(parent_url, params={{"sysparm_query": f"number={last_seg}", "sysparm_fields": "sys_id,number", "sysparm_limit": 1}})
                         if l_res.status_code in [200, 201]:
                             l_items = l_res.json().get("result", [])
                             if l_items and l_items[0].get("sys_id"):
-                                url = f"{{parent_url}}/{{l_items[0]['sys_id']}}"
+                                url = f"{parent_url}/{l_items[0]['sys_id']}"
                     except Exception:
                         pass
 

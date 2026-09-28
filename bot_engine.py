@@ -1010,20 +1010,20 @@ STRIPPED ERROR LOG:
 APPLICATION CONTEXT:
 {app_context}
 
-JENKINS CI/CD CONTEXT:
+JENKINS / ADO CI/CD CONTEXT:
 {jenkins_info or 'Pipeline build status normal'}
 
-GITHUB CODEBASE CONTEXT:
+CODEBASE CONTEXT:
 {github_info or 'No breaking commits detected'}
 
 Return your analysis in STRICT JSON format:
 {{
-  "incident_title": "Concise Technical Title e.g. [P2-DB-ALERT] DataIntegrityViolationException in User Entity (max 70 chars)",
-  "root_cause": "Precise, deep technical explanation of the failure (explain exact SQL statements, column limits, exceptions, input data causing the error)",
-  "affected_component": "Specific database table, JPA entity, or class that failed",
+  "incident_title": "Concise Technical Title (max 70 chars)",
+  "root_cause": "Precise, deep technical explanation of the failure (explain exact statements, exceptions, parameters, and input data causing the error)",
+  "affected_component": "Specific class, file, endpoint, database entity, or component that failed",
   "severity": "High",
-  "recommended_fix": "Clear 3-step technical remediation plan to fix code/schema and redeploy",
-  "formatted_rca_markdown": "Full professional Markdown report with Root Cause, Component Affected, Code/DB Fix, and Verification Steps"
+  "recommended_fix": "Clear 3-step technical remediation plan to fix code/schema/configuration and redeploy",
+  "formatted_rca_markdown": "Full professional Markdown report with Root Cause, Component Affected, Remediation Plan, and Verification Steps"
 }}"""
 
     messages = [
@@ -1040,46 +1040,60 @@ Return your analysis in STRICT JSON format:
             return parsed
         raise ValueError("Invalid RCA structure returned by LLM")
     except Exception as e:
-        logger.error(f"Error calling Universal LLM for RCA: {e}")
+        logger.warning(f"Universal LLM RCA call returned error or fallback needed: {e}")
         
-        # High-precision deterministic RCA analysis for SQL and Spring Boot errors
-        err_lower = str(stripped_error or "").lower()
-        if "value too long for column" in err_lower or "22001" in err_lower or "dataintegrityviolation" in err_lower:
-            title = f"[P2-DB-ALERT] Data Truncation Error in {container_name}"
-            col_match = re.search(r'column\s+"([^"]+)"', stripped_error or "", re.IGNORECASE)
-            col_name = col_match.group(1) if col_match else "NAME"
-            root_cause = f"Database Data Truncation: Insert payload exceeds database column constraint ({col_name} VARCHAR(50)). Input string length was > 1000 characters."
-            fix = f"1. Update database schema to expand column size: ALTER TABLE users ALTER COLUMN name VARCHAR(2048);\n2. Add input validation in controller/JPA entity to sanitize/truncate incoming name parameter.\n3. Redeploy application via Azure DevOps CI/CD pipeline."
-            rca_md = f"""### 🔍 SRE Root Cause Analysis (RCA)
+        # Generic, dynamic pattern extraction from the live error log
+        err_str = str(stripped_error or "").strip()
+        
+        # 1. Extract exception or fatal error pattern dynamically
+        exc_match = re.search(r'([A-Za-z0-9_.]*(?:Exception|Error|Fault|Crash|Failure|Fatal))(?::\s*([^\n\r]+))?', err_str, re.IGNORECASE)
+        exc_name = exc_match.group(1) if exc_match else "Runtime Anomaly"
+        exc_detail = exc_match.group(2).strip() if (exc_match and exc_match.group(2)) else ""
+        
+        # 2. Extract failed code file or line if available
+        file_match = re.search(r'(?:at\s+|in\s+|File\s+["\']?)([\w/\\.-]+\.(?:java|py|js|ts|go|cs|cpp|rb))(?::(\d+)|,\s*line\s+(\d+))?', err_str)
+        failed_file = file_match.group(1) if file_match else ""
+        failed_line = (file_match.group(2) or file_match.group(3)) if file_match else ""
+        file_loc = f"{failed_file}:{failed_line}" if failed_line else failed_file
+        
+        # 3. Formulate dynamic technical title and root cause
+        title = f"[P2-ALERT] {exc_name} in {container_name}"[:70]
+        root_cause_desc = f"Uncaught {exc_name}: {exc_detail}" if exc_detail else f"Runtime failure occurred in {container_name}. Error signature: {err_str[:250]}"
+        if file_loc:
+            root_cause_desc += f" (Trace location: {file_loc})"
+            
+        affected_comp = file_loc or container_name
+        
+        remediation = (
+            f"1. Inspect stack trace and review recent commits touching {affected_comp}.\n"
+            f"2. Apply bugfix or configuration patch for {exc_name}.\n"
+            f"3. Run automated regression tests and redeploy via CI/CD pipeline."
+        )
+        
+        rca_md = f"""### 🔍 SRE Root Cause Analysis (RCA)
 
-- **Incident Classification**: Data Truncation & SQL Exception (H2 State 22001)
+- **Incident Classification**: {exc_name}
 - **Target Workload**: `{container_name}`
-- **Affected Component**: Database table `users`, column `{col_name}`
+- **Affected Component**: `{affected_comp}`
 
 #### 📌 Root Cause Summary
-The application encountered an uncaught `DataIntegrityViolationException` / `JdbcSQLDataException` while executing an `INSERT` statement. The input value passed into column `{col_name}` exceeded the allocated maximum column length (`VARCHAR(50)`).
+{root_cause_desc}
 
 #### 🛠️ Recommended Remediation Plan
-1. **Schema Expansion**: Modify the schema definition from `VARCHAR(50)` to `VARCHAR(2048)` or `TEXT`.
-2. **Entity Validation**: Add `@Size(max=2048)` or input sanitization on `name` in `com.devops.sample.controller.AppController`.
-3. **CI/CD Pipeline Verification**: Trigger Azure DevOps pipeline to test and redeploy the patch to Azure App Service.
+{remediation}
+
+#### 📋 Raw Diagnostic Extract
+```text
+{err_str[:1200]}
+```
 """
-            return {
-                "incident_title": title,
-                "root_cause": root_cause,
-                "affected_component": f"{container_name} (users table)",
-                "severity": "Medium",
-                "recommended_fix": fix,
-                "formatted_rca_markdown": rca_md
-            }
-        
         return {
-            "incident_title": f"Application Error in {container_name}",
-            "root_cause": f"Automated SRE analysis detected error: {stripped_error[:300]}",
-            "affected_component": container_name,
+            "incident_title": title,
+            "root_cause": root_cause_desc,
+            "affected_component": affected_comp,
             "severity": "High",
-            "recommended_fix": "Inspect container logs, review recent commits, and restart service if necessary.",
-            "formatted_rca_markdown": f"### Root Cause Analysis\n\n**Detected Error:**\n```text\n{stripped_error}\n```"
+            "recommended_fix": remediation,
+            "formatted_rca_markdown": rca_md
         }
 
 
@@ -1463,25 +1477,35 @@ def find_matching_open_incident(incidents: list, context: dict = None) -> Option
     Matching criteria:
     1. Active Lifecycle State: active == True or state in ['1', '2', '3'] (New, In Progress, On Hold).
        Excludes Resolved (6), Closed (7), or Canceled (8).
-    2. Semantic & Description Match: short_description or description contains:
-       - Target App Service name (e.g. 'devops-vsp-sample-app-shakil')
-       - Repository name (e.g. 'springboot-app')
-       - Pipeline name (e.g. 'springboot-app - app ci-cd')
-       - Domain keywords (e.g. 'spring boot', 'springboot')
+    2. Semantic & Description Match: short_description or description contains
+       any extracted context tokens (app name, repo name, pipeline name, bot keywords).
     """
     if not isinstance(incidents, list) or not incidents:
         return None
 
     ctx = context or {}
-    app_name = str(ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("site_name") or "").lower()
-    repo_name = str(ctx.get("repo") or ctx.get("repository") or "").lower()
-    pipeline_name = str(ctx.get("pipeline_name") or ctx.get("pipeline") or "").lower()
     bot_name = str(ctx.get("name") or "").lower()
 
-    # Build search tokens
-    search_tokens = [t for t in [app_name, repo_name, pipeline_name] if t and len(t) > 2]
-    if "spring" in app_name or "spring" in repo_name or "spring" in bot_name or not search_tokens:
-        search_tokens.extend(["spring boot", "springboot"])
+    # Dynamically extract all resource and context tokens from context_config
+    search_tokens = []
+    for k, v in ctx.items():
+        if isinstance(v, str) and len(v) > 2 and not k.startswith("_"):
+            # Avoid generic long URLs, extract resource names
+            if "http" in v:
+                v_clean = v.rstrip("/").split("/")[-1]
+                if len(v_clean) > 2:
+                    search_tokens.append(v_clean.lower())
+            else:
+                search_tokens.append(v.lower())
+    
+    # Also include significant words from bot name if available
+    if bot_name:
+        for word in re.split(r'[\s\-_]+', bot_name):
+            if len(word) > 3 and word.lower() not in ["monitor", "error", "auto", "daily", "bot", "agent", "scrum", "briefing", "alert"]:
+                search_tokens.append(word.lower())
+
+    # Deduplicate tokens
+    search_tokens = list(dict.fromkeys(search_tokens))
 
     for inc in incidents:
         if not isinstance(inc, dict):
@@ -1601,10 +1625,10 @@ def _execute_deterministic_agent_fallback(
 
     # 1. Azure App Service Health & Error Log Guardian Fallback (Prioritized for App Service Monitoring)
     elif any("azure_app_service" in s or "app_service" in s or "webapp" in s for s in tools_req) or ctx.get("app_service_name") or ctx.get("site_name"):
-        app_name = ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("site_name") or "devops-vsp-sample-app-shakil"
+        app_name = ctx.get("app_service_name") or ctx.get("app_name") or ctx.get("site_name") or "web-app"
         rg_name = ctx.get("resource_group") or "rg-devops-uaenorth"
         ado_project = ctx.get("project") or "AI-POC"
-        ado_repo = ctx.get("repo") or ctx.get("repository") or "springboot-app"
+        ado_repo = ctx.get("repo") or ctx.get("repository") or "app-repo"
 
         # Step 1: Query App Service state
         _, app_data = _add_step("Get App Service Details", "azure_app_service", "get_app_service_details", {"app_service_name": app_name, "resource_group": rg_name}, f"Azure App Service State Probe ({app_name})")
@@ -1631,8 +1655,8 @@ def _execute_deterministic_agent_fallback(
             incident_id = existing_sys_id
             if any("servicenow" in s for s in tools_req) and not existing_sys_id:
                 inc_args = {
-                    "short_description": f"Spring Boot App Error - {app_name}",
-                    "description": f"Automated Alert: Runtime error detected on Azure App Service '{app_name}'. SRE AI investigating root cause.",
+                    "short_description": f"Application Runtime Error - {app_name}",
+                    "description": f"Automated Alert: Runtime error detected on '{app_name}'. SRE AI investigating root cause.",
                     "work_notes": f"🔍 [Initial Error Log Extract]\n{stripped_err[:1500] if stripped_err else 'HTTP 500 error'}",
                     "urgency": "2",
                     "impact": "2",
@@ -1660,16 +1684,17 @@ def _execute_deterministic_agent_fallback(
                 _, b_data = _add_step("List Azure DevOps Builds", "azure_devops", "list_builds", {"project": ado_project, "top": 3}, f"Azure DevOps Pipeline Build Trace ({ado_project})")
                 
                 # Inspect codebase controller
-                _, file_data = _add_step("Inspect Codebase Controller", "azure_devops", "get_file_content", {"project": ado_project, "repository": ado_repo, "path": "src/main/java/com/devops/sample/controller/AppController.java", "includeContent": True}, f"Azure DevOps Code Repository Inspection ({ado_repo})")
+                file_target = ctx.get("file_path") or ctx.get("controller_path") or "src/main/java/com/devops/sample/controller/AppController.java"
+                _, file_data = _add_step("Inspect Codebase Controller", "azure_devops", "get_file_content", {"project": ado_project, "repository": ado_repo, "path": file_target, "includeContent": True}, f"Azure DevOps Code Repository Inspection ({ado_repo})")
                 if file_data and isinstance(file_data, dict):
-                    ado_code_context = f"AppController source: {str(file_data.get('content', ''))[:800]}"
+                    ado_code_context = f"Source context: {str(file_data.get('content', ''))[:800]}"
 
             # Step 7: AI RCA Synthesis
             s_num = len(steps_log) + 1
             rca_res = generate_ai_rca(
                 stripped_err or f"Runtime SQL or HTTP exception on {app_name}",
-                f"{app_name} (Spring Boot App)",
-                app_context=f"Azure App Service: {app_name} | Azure DevOps Repo: https://dev.azure.com/shakilaipoc/{ado_project}/_git/{ado_repo} | {ado_code_context}"
+                f"{app_name}",
+                app_context=f"App Service: {app_name} | Resource Group: {rg_name} | Azure DevOps Repo: {ado_project}/{ado_repo} | {ado_code_context}"
             )
             rca_md = rca_res.get("formatted_rca_markdown", f"### Root Cause Analysis\n\nRuntime anomaly detected on {app_name}.\n\n**Error:**\n```\n{stripped_err}\n```")
             steps_log.append({
@@ -1699,7 +1724,7 @@ def _execute_deterministic_agent_fallback(
                     "incident_id": incident_id,
                     "state": "6",
                     "close_code": "Solution provided",
-                    "close_notes": f"Resolved by Autonomous SRE AI. Root Cause: {rca_res.get('root_cause', 'Schema column constraint mismatch')}."
+                    "close_notes": f"Resolved by Autonomous SRE AI. Root Cause: {rca_res.get('root_cause', 'Automated diagnostic and verification completed')}."
                 }, "ServiceNow Incident Auto-Resolution")
 
         else:
@@ -1716,6 +1741,7 @@ def _execute_deterministic_agent_fallback(
     # 2. CI/CD Pipeline Guardian Fallback (Azure DevOps + ServiceNow)
     elif any("azure_devops" in s for s in tools_req) or any("devops" in s for s in tools_req):
         project = ctx.get("project") or ctx.get("ado_repo") or "AI-POC"
+        repo_val = ctx.get("repo") or ctx.get("repository") or "app-repo"
         pipe_val = str(ctx.get("pipeline") or ctx.get("pipeline_name") or ctx.get("definitions") or "4").strip()
         pipe_map = {
             "springboot-app - app ci-cd": "4",
@@ -1755,7 +1781,7 @@ def _execute_deterministic_agent_fallback(
             incident_id = existing_sys_id
             if any("servicenow" in s for s in tools_req) and not existing_sys_id:
                 inc_args = {
-                    "short_description": "Spring Boot App Error",
+                    "short_description": f"Pipeline Build Failure - {repo_val} (#{b_num})",
                     "description": f"Automated Alert: Azure DevOps Build #{b_num} in pipeline '{pipe_val}' failed. Autonomous SRE investigating root cause.",
                     "urgency": "2",
                     "impact": "2",
@@ -1787,8 +1813,8 @@ def _execute_deterministic_agent_fallback(
             s_num = len(steps_log) + 1
             rca_res = generate_ai_rca(
                 error_details,
-                f"springboot-app (Build #{b_num})",
-                app_context="Repository: springboot-app | Branch: main | Maven Spring Boot 3.x Application"
+                f"{repo_val} (Build #{b_num})",
+                app_context=f"Project: {project} | Repository: {repo_val} | Pipeline: {pipe_val}"
             )
             rca_md = rca_res.get("formatted_rca_markdown", f"### Root Cause Analysis\n\nBuild #{b_num} failed in CI/CD pipeline.")
             steps_log.append({
@@ -1813,6 +1839,13 @@ def _execute_deterministic_agent_fallback(
                     "incident_id": incident_id,
                     "work_note": f"🔍 [AI Root Cause Analysis & Remediation Plan]\n\n{rca_md}"
                 }, "ServiceNow Incident Remediation Update")
+
+                _add_step("Resolve Incident", "servicenow", "resolve_incident", {
+                    "incident_id": incident_id,
+                    "state": "6",
+                    "close_code": "Solution provided",
+                    "close_notes": f"Resolved by Autonomous SRE AI. Root Cause: {rca_res.get('root_cause', 'Build failure analyzed and resolved')}."
+                }, "ServiceNow Incident Auto-Resolution")
 
         else:
             overall_status = "healthy"
@@ -2385,9 +2418,9 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                     steps_log.append(step_record)
                     continue
 
-            # 2. Health Gate: Only skip remediation steps if telemetry is explicitly healthy and NO failures were detected
-            is_remediation_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["create_incident", "add_work_note", "update_incident", "close_incident", "generate_ai_rca", "perform_rca"])
-            if execution_state.get("pipeline_healthy") and not execution_state.get("has_failure") and is_remediation_step and step_tool != "query_incidents":
+            # 2. Health Gate: Only execute incident creation and remediation steps IF a failure/error was detected
+            is_remediation_step = any(k in step_tool.lower() or k in step_action.lower() for k in ["create_incident", "add_work_note", "update_incident", "resolve_incident", "close_incident", "generate_ai_rca", "perform_rca"])
+            if not execution_state.get("has_failure") and is_remediation_step and step_tool not in ["query_incidents", "list_incidents"]:
                 step_record = {
                     "step": step_num,
                     "name": f"{step_action} ({step_server}.{step_tool})" if step_server and step_tool else step_action,
@@ -2566,14 +2599,27 @@ def _execute_bot_pipeline(bot: Dict[str, Any], bot_id: str, trigger_reason: str,
                 }
 
                 # Check for runtime errors in tool output
-                raw_lower = raw_out.lower()
-                err_indicators = ["error", "exception", "500", "502", "503", "fatal", "failed", "crash", "traceback", "value too long", "sqlexception", "nullpointerexception", "terminated", "stopped"]
-                if any(ind in raw_lower for ind in err_indicators) and step_tool not in ["query_incidents", "list_incidents"]:
-                    execution_state["has_failure"] = True
-                    execution_state["pipeline_healthy"] = False
-                    execution_state["error_log"] = raw_out
-                    overall_status = "incident_created"
-                    logger.info(f"🚨 Detected error in step {step_num} ({step_server}.{step_tool})")
+                is_log_fetch = any(k in step_tool.lower() for k in ["log", "kudu", "trace", "stdout", "stderr"])
+                if is_log_fetch:
+                    err_block = extract_stripped_error_log(raw_out)
+                    if err_block:
+                        execution_state["has_failure"] = True
+                        execution_state["pipeline_healthy"] = False
+                        execution_state["error_log"] = err_block
+                        overall_status = "incident_created"
+                        logger.info(f"🚨 Detected error log in step {step_num} ({step_server}.{step_tool})")
+                elif step_tool not in ["query_incidents", "list_incidents"]:
+                    raw_lower = raw_out.lower()
+                    cleaned_lower = re.sub(r'lasterror(?:details)?\s*:\s*,?', '', raw_lower)
+                    cleaned_lower = re.sub(r'errorcount\s*:\s*0', '', cleaned_lower)
+                    
+                    fatal_patterns = [r'\bexception\b', r'\bfatal\b', r'\bcrash\b', r'\btraceback\b', r'\b500\b', r'\b502\b', r'\b503\b', r'\bstatus:\s*failed\b', r'\bresult:\s*failed\b', r'\bterminated\b']
+                    if any(re.search(p, cleaned_lower) for p in fatal_patterns):
+                        execution_state["has_failure"] = True
+                        execution_state["pipeline_healthy"] = False
+                        execution_state["error_log"] = raw_out
+                        overall_status = "incident_created"
+                        logger.info(f"🚨 Detected failure in step {step_num} ({step_server}.{step_tool})")
 
                 if step_tool == "list_builds" and isinstance(parsed_data, dict):
                     builds_list = parsed_data.get("value") or parsed_data.get("builds") or []
