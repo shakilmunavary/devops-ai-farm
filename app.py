@@ -871,7 +871,7 @@ def ensure_server_script(platform_id: str, config_values: dict = None, tools: li
 try:
     _startup_reg = load_server_registry()
     for _s_id, _s_data in (_startup_reg.get("servers", {}) or {}).items():
-        _tools = _s_data.get("tools", [])
+        _tools = _s_data.get("all_tools") or _s_data.get("tools", [])
         if _tools:
             ensure_server_script(_s_id, tools=_tools)
 except Exception as _e_init:
