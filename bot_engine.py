@@ -1242,7 +1242,16 @@ def generate_dynamic_execution_report(
     steps_table_rows = []
     for s in steps_log:
         st = s.get("status", "success")
-        badge = "🟢 Success" if st == "success" else ("🟡 Warning" if st == "warning" else ("🛡️ Deduplicated" if "deduplicat" in s.get("details", "").lower() else "🔴 Alert"))
+        if st == "success":
+            badge = "🟢 Success"
+        elif st == "skipped":
+            badge = "⚪ Skipped (Nominal)"
+        elif st == "warning":
+            badge = "🟡 Warning"
+        elif "deduplicat" in s.get("details", "").lower():
+            badge = "🛡️ Deduplicated"
+        else:
+            badge = "🔴 Alert"
         step_name = s.get("name", "Action")
         details = s.get("details", "")[:120].replace("\n", " ")
         steps_table_rows.append(f"| **Step {s.get('step', '-')}** | {step_name} | {badge} | {details} |")
