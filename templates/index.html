@@ -2913,6 +2913,41 @@
 
     
     
+    <!-- Bot Full Prompt & Blueprint Viewer Modal Popup -->
+    <div class="modal-backdrop" id="bot-prompt-modal">
+        <div class="modal-box" style="width: 820px; max-width: 95vw; max-height: 88vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="background: linear-gradient(90deg, #0f172a, #1e293b); padding: 14px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="brand-logo" style="width: 32px; height: 32px; font-size: 15px; background: linear-gradient(135deg, #0284c7, #38bdf8); display: flex; align-items: center; justify-content: center; border-radius: 6px;">📋</div>
+                    <div>
+                        <h3 id="prompt-modal-bot-name" style="margin: 0; font-size: 15px; font-weight: 750; color: #f8fafc;">Bot Initial Prompt & Blueprint</h3>
+                        <div id="prompt-modal-bot-id" style="font-size: 11px; color: #94a3b8; font-family: var(--font-mono);"></div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="ag-mini-btn" onclick="copyPromptFromModal()" style="background: rgba(56, 189, 248, 0.18); border-color: #38bdf8; color: #7dd3fc; font-weight: 700; padding: 6px 14px; font-size: 12px;">
+                        📋 Copy Full Prompt
+                    </button>
+                    <button class="modal-close" onclick="closePromptModal()">&times;</button>
+                </div>
+            </div>
+            <div style="padding: 18px 20px; overflow-y: auto; flex: 1; background: var(--bg-base);">
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Complete, exact prompt instructions provided during bot creation:</span>
+                    <span style="font-size: 11px; color: #38bdf8;">Markdown / Plaintext</span>
+                </div>
+                <textarea id="prompt-modal-text" readonly style="width: 100%; height: 380px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 16px; font-family: var(--font-mono); font-size: 12.5px; color: #e2e8f0; line-height: 1.6; resize: vertical; user-select: text; outline: none;"></textarea>
+                <div id="prompt-modal-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px;"></div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; background: var(--bg-surface); border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn-cancel" onclick="closePromptModal()" style="background: var(--bg-elevated); border: 1px solid var(--border-color); color: #cbd5e1; padding: 7px 16px; border-radius: 6px; cursor: pointer;">Close</button>
+                <button class="btn-primary" onclick="copyPromptFromModal()" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: none; color: white; padding: 7px 16px; border-radius: 6px; font-weight: 700; cursor: pointer;">
+                    📋 Copy Prompt
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Interactive Conversational AI Bot Architect Studio Modal -->
     <div class="modal-backdrop" id="bot-creator-modal">
         <div class="modal-box" style="width: 1040px; max-width: 98vw; height: 840px; max-height: 94vh; display: flex; flex-direction: column;">
@@ -5570,13 +5605,62 @@
             }
         }
 
-        function copyBotPrompt(botId) {
-            const bot = allBots[botId];
-            if (!bot) return;
-            const promptText = bot.instructions || bot.description || '';
-            navigator.clipboard.writeText(promptText).then(() => {
-                showToast('📋 Initial Prompt copied to clipboard!', 'info');
+        function openPromptModal(botId) {
+            const bId = botId || agActiveBotId;
+            if (!bId || !allBots[bId]) {
+                showToast('No bot selected.', 'info');
+                return;
+            }
+            const bot = allBots[bId];
+            const nameEl = document.getElementById('prompt-modal-bot-name');
+            const idEl = document.getElementById('prompt-modal-bot-id');
+            const textEl = document.getElementById('prompt-modal-text');
+            const tagsEl = document.getElementById('prompt-modal-tags');
+
+            if (nameEl) nameEl.textContent = bot.name || bId;
+            if (idEl) idEl.textContent = `ID: ${bId}`;
+            
+            const rawPrompt = bot.raw_prompt || bot.instructions || bot.description || '';
+            if (textEl) textEl.value = rawPrompt;
+
+            if (tagsEl) {
+                let tagsHtml = '';
+                const ctx = bot.context_config || {};
+                if (ctx.app_service_name) tagsHtml += `<span class="ag-tag">🌐 App: <strong>${escapeHtml(ctx.app_service_name)}</strong></span>`;
+                if (ctx.project) tagsHtml += `<span class="ag-tag">📁 Project: <strong>${escapeHtml(ctx.project)}</strong></span>`;
+                if (ctx.repository || ctx.repo) tagsHtml += `<span class="ag-tag">📦 Repo: <strong>${escapeHtml(ctx.repository || ctx.repo)}</strong></span>`;
+                (bot.tools_required || []).forEach(t => {
+                    tagsHtml += `<span class="ag-tag" style="border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;">🛠️ ${escapeHtml(t)}</span>`;
+                });
+                tagsEl.innerHTML = tagsHtml;
+            }
+
+            const modal = document.getElementById('bot-prompt-modal');
+            if (modal) modal.classList.add('active');
+        }
+
+        function closePromptModal() {
+            const modal = document.getElementById('bot-prompt-modal');
+            if (modal) modal.classList.remove('active');
+        }
+
+        function copyPromptFromModal() {
+            const textEl = document.getElementById('prompt-modal-text');
+            if (!textEl || !textEl.value) {
+                showToast('No prompt text to copy.', 'info');
+                return;
+            }
+            navigator.clipboard.writeText(textEl.value).then(() => {
+                showToast('📋 Complete Full Prompt copied to clipboard!', 'success');
             });
+        }
+
+        function copyBotPrompt(botId) {
+            openPromptModal(botId);
+        }
+
+        function agCopyActiveBotPrompt() {
+            openPromptModal(agActiveBotId);
         }
 
         

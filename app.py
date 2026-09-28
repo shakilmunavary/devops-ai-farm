@@ -1812,6 +1812,10 @@ def save_bot():
     data = request.get_json() or {}
     if not data.get("name") or not data.get("instructions"):
         return jsonify({"error": "Bot name and instructions are required"}), 400
+    if "raw_prompt" not in data and "prompt" in data:
+        data["raw_prompt"] = data["prompt"]
+    elif "raw_prompt" not in data and "instructions" in data:
+        data["raw_prompt"] = data["instructions"]
     saved = bot_registry.create_or_update_bot(data)
     return jsonify({"success": True, "bot": saved})
 

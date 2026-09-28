@@ -44,63 +44,124 @@ class BotRegistry:
         return os.path.join(self.bots_dir, safe_id)
 
     def _ensure_init(self):
-        # Auto-seed canonical production bots if none exist
+        # Auto-seed canonical production bots with full verbatim prompts
         os.makedirs(self.bots_dir, exist_ok=True)
+        
+        scrum_prompt = """Create an autonomous Daily Morning Scrum and 360° DevOps Standup Briefing bot for our ecosystem.
+
+Target Environment:
+- Azure App Service: devops-vsp-sample-app-shakil (Resource Group: rg-devops-uaenorth)
+- Azure DevOps Organization: https://dev.azure.com/shakilaipoc
+- Azure DevOps Project: AI-POC
+- Azure DevOps Repository: springboot-app (Branch: main)
+- Azure DevOps Pipeline: springboot-app - app ci-cd (Definition ID: 4)
+- ServiceNow Instance: https://dev392242.service-now.com (Instance ID: dev392242)
+
+Goal:
+Collect and aggregate a 24-hour health, ticket, and code activity report across our infrastructure to power today's engineering standup.
+
+Workflow Execution Steps:
+1. Azure App Service Health Audit:
+   - Check the live container status, HTTP 200 response, and retrieve recent Kudu log telemetry for 'devops-vsp-sample-app-shakil' in resource group 'rg-devops-uaenorth'.
+   - Count any runtime warnings or exceptions logged in the past 24 hours.
+
+2. ServiceNow Incident & Support Overview:
+   - Query all ServiceNow incidents in instance 'dev392242' created or updated in the last 24 hours.
+   - Categorize tickets by severity: P1/P2 critical blockers vs. P3/P4 maintenance and auto-resolved incidents.
+
+3. Azure DevOps (ADO) PRs & CI/CD Pipeline Status:
+   - Inspect active Pull Requests raised in the last 24 hours on repository 'springboot-app' in project 'AI-POC'.
+   - Check the last 5 CI/CD pipeline build execution statuses for 'springboot-app - app ci-cd' (Pass / Fail / In-Progress).
+
+4. AI Executive Scrum Briefing Synthesis:
+   - Generate a structured Morning Standup Markdown Briefing covering:
+     * 🚦 Overall System Health Traffic Light (🟢 Green / 🟡 Amber / 🔴 Red)
+     * 📊 24-Hour KPI Summary Table (App Service Health, Open PRs, Incident Count, Build Pass Rate)
+     * 🚨 Urgent Blockers & High-Priority Attention Items for Scrum
+     * 🔀 Active PRs & Reviewer Queue
+     * 🎯 Recommended Daily Action Items & Engineering Focus Areas for Today"""
+
+        app_rca_prompt = """Create an autonomous Continuous AIOps Self-Healing and Error Monitor bot for Azure App Service devops-vsp-sample-app-shakil.
+
+Target Environment:
+- Azure App Service: devops-vsp-sample-app-shakil (Resource Group: rg-devops-uaenorth)
+- Azure DevOps Project: AI-POC
+- Azure DevOps Repository: springboot-app (Branch: main)
+- ServiceNow Instance: https://dev392242.service-now.com (Instance ID: dev392242)
+
+Goal:
+Continuously observe container health and live Kudu error logs. If fatal errors or exceptions (NullPointerException, SqlExceptionHelper, 500 crashes) are detected, perform AI Root Cause Analysis, deduplicate ServiceNow incident tickets, investigate ADO source code controller, update the ticket with AI RCA work notes, and resolve the incident.
+
+Workflow Execution Steps:
+1. Check Azure App Service container health and fetch live Kudu application logs.
+2. Detect runtime exceptions and strip out noise.
+3. Deduplicate ServiceNow tickets to ensure no duplicate incidents are created for the same active failure.
+4. If no open ticket exists, create a P2 Incident in ServiceNow and add initial investigation note.
+5. Inspect repository source code in Azure DevOps (AppController.java) and recent build traces.
+6. Perform Deep Mistral AI Root Cause Analysis (RCA).
+7. Update ServiceNow incident work notes with the full RCA and mark incident resolved."""
+
         default_bots = [
-                {
-                    "id": "springboot_app_error_monitor",
-                    "name": "SpringBoot App Error Monitor & Auto-RCA",
-                    "description": "Monitors Azure App Service devops-vsp-sample-app-shakil for errors, logs ServiceNow incident, investigates ADO repo code, and resolves ticket with AI RCA.",
-                    "status": "active",
-                    "trigger_type": "on_demand",
-                    "instructions": "Monitor logs for devops-vsp-sample-app-shakil. Any ERROR in logs, check/create ServiceNow ticket with Short Description 'Spring Boot App Error', add note 'Incident found and SRE AI already started investigation', check code in ADO springboot-app repo main branch, analyze pipeline logs, find RCA, update RCA in ticket, and resolve ticket.",
-                    "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
-                    "context_config": {
-                        "app_service_name": "devops-vsp-sample-app-shakil",
-                        "resource_group": "rg-devops-uaenorth",
-                        "project": "AI-POC",
-                        "repo": "springboot-app",
-                        "branch": "main"
-                    }
-                },
-                {
-                    "id": "morning_scrum_status_bot",
-                    "name": "Daily Morning Scrum & 360° Standup Status",
-                    "description": "Aggregates 24-hour health across App Service, ServiceNow open/closed incidents, and Azure DevOps PRs & pipeline builds for daily engineering scrum.",
-                    "status": "active",
-                    "trigger_type": "on_demand",
-                    "instructions": "Inspect App Service health, query ServiceNow incidents in last 24h, list active PRs and pipeline builds in Azure DevOps, and generate a 360° Morning Scrum Briefing.",
-                    "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
-                    "context_config": {
-                        "app_service_name": "devops-vsp-sample-app-shakil",
-                        "resource_group": "rg-devops-uaenorth",
-                        "project": "AI-POC",
-                        "repo": "springboot-app",
-                        "branch": "main"
-                    }
-                },
-                {
-                    "id": "pr_quality_gatekeeper_bot",
-                    "name": "Pull Request Quality & Security Gatekeeper",
-                    "description": "Monitors incoming PRs in Azure DevOps, evaluates code security vulnerabilities, checks CI build pass rates, and logs audit tracking in ServiceNow.",
-                    "status": "active",
-                    "trigger_type": "on_demand",
-                    "instructions": "Inspect latest PRs and builds in Azure DevOps, run AI security & regression review on modified code, and sync audit status to ServiceNow.",
-                    "tools_required": ["azure_devops", "servicenow"],
-                    "context_config": {
-                        "project": "AI-POC",
-                        "repo": "springboot-app",
-                        "branch": "main"
-                    }
+            {
+                "id": "daily_morning_scrum_standup_briefing",
+                "name": "Daily Morning Scrum & 360° Standup Briefing Bot",
+                "description": "Automated 360° DevOps Standup Briefing aggregating system health, incidents, PRs, and pipeline status.",
+                "status": "active",
+                "trigger_type": "on_demand",
+                "raw_prompt": scrum_prompt,
+                "instructions": scrum_prompt,
+                "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
+                "context_config": {
+                    "app_service_name": "devops-vsp-sample-app-shakil",
+                    "resource_group": "rg-devops-uaenorth",
+                    "ado_organization": "shakilaipoc",
+                    "project": "AI-POC",
+                    "repository": "springboot-app",
+                    "pipeline": "springboot-app - app ci-cd",
+                    "ado_pipeline_definition_id": 4,
+                    "branch": "main",
+                    "servicenow_instance": "dev392242",
+                    "time_window_hours": 24
                 }
-            ]
+            },
+            {
+                "id": "springboot_app_error_monitor",
+                "name": "SpringBoot App Error Monitor & Auto-RCA",
+                "description": "Monitors Azure App Service devops-vsp-sample-app-shakil for errors, logs ServiceNow incident, investigates ADO repo code, and resolves ticket with AI RCA.",
+                "status": "active",
+                "trigger_type": "on_demand",
+                "raw_prompt": app_rca_prompt,
+                "instructions": app_rca_prompt,
+                "tools_required": ["azure_app_service", "servicenow", "azure_devops"],
+                "context_config": {
+                    "app_service_name": "devops-vsp-sample-app-shakil",
+                    "resource_group": "rg-devops-uaenorth",
+                    "project": "AI-POC",
+                    "repo": "springboot-app",
+                    "branch": "main",
+                    "servicenow_instance": "dev392242"
+                }
+            }
+        ]
+
+        allowed_ids = {b["id"] for b in default_bots}
+        # Clean obsolete bot folders
+        for folder_name in list(os.listdir(self.bots_dir)):
+            if folder_name not in allowed_ids:
+                fp = os.path.join(self.bots_dir, folder_name)
+                if os.path.isdir(fp):
+                    try:
+                        import shutil
+                        shutil.rmtree(fp, ignore_errors=True)
+                    except Exception:
+                        pass
+
         for bot_item in default_bots:
             b_folder = os.path.join(self.bots_dir, bot_item["id"])
             os.makedirs(b_folder, exist_ok=True)
             b_json_path = os.path.join(b_folder, "bot.json")
-            if not os.path.exists(b_json_path):
-                with open(b_json_path, "w", encoding="utf-8") as f:
-                    json.dump(bot_item, f, indent=2)
+            with open(b_json_path, "w", encoding="utf-8") as f:
+                json.dump(bot_item, f, indent=2)
 
     def list_bots(self) -> Dict[str, Any]:
         """Loads all bot profiles from their individual folders."""
