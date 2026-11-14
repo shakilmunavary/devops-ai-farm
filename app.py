@@ -278,8 +278,9 @@ def get_credentials() -> Dict[str, str]:
         elif k_upper in ["INSTANCE", "INSTANCE_NAME", "INSTANCE_URL", "SUBDOMAIN", "SNOW_INSTANCE"]:
             creds["instance"] = v_str
             creds["instance_name"] = v_str
+            clean_v = v_str.replace("https://", "").replace("http://", "").strip().rstrip("/")
             if "service-now.com" in v_str:
-                creds["base_url"] = v_str
+                creds["base_url"] = f"https://{{clean_v}}"
         elif k_upper in ["PERSONAL_ACCESS_TOKEN", "PAT", "API_TOKEN", "TOKEN", "SECRET", "PASSWORD", "AUTH", "AUTH_HEADER", "API_KEY", "GITHUB_TOKEN", "GITHUB_PAT", "GH_TOKEN", "GH_PAT", "ACCESS_TOKEN"]:
             creds["auth_val"] = v_str
             creds["token"] = v_str
@@ -326,12 +327,14 @@ def get_credentials() -> Dict[str, str]:
     elif any(w in srv_lower for w in ["azure", "app_service", "appservice", "vm", "compute", "iaas"]):
         creds["base_url"] = "https://management.azure.com"
     elif any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
-        if inst and not inst.startswith("http"):
-            creds["base_url"] = f"https://{{inst}}.service-now.com"
-        elif inst:
-            creds["base_url"] = inst
-        elif not creds.get("base_url") or "api.service.com" in creds.get("base_url"):
-            creds["base_url"] = "https://dev.service-now.com"
+        raw_snow = inst or creds.get("base_url") or ""
+        clean_snow = raw_snow.replace("https://", "").replace("http://", "").strip().rstrip("/")
+        if clean_snow and not clean_snow.endswith(".service-now.com") and "." not in clean_snow:
+            clean_snow = f"{{clean_snow}}.service-now.com"
+        if clean_snow and "api.service.com" not in clean_snow:
+            creds["base_url"] = f"https://{{clean_snow}}"
+        elif not creds.get("base_url") or "api.service.com" in creds.get("base_url") or not creds.get("base_url").startswith("http"):
+            creds["base_url"] = "https://dev302564.service-now.com"
     elif "github" in srv_lower:
         creds["base_url"] = "https://api.github.com"
     elif "gitlab" in srv_lower:
@@ -342,6 +345,13 @@ def get_credentials() -> Dict[str, str]:
         if inst and not inst.startswith("http"):
             creds["base_url"] = f"https://{{inst}}.atlassian.net"
 
+    b_url = (creds.get("base_url") or "").strip()
+    if b_url:
+        if not b_url.startswith("http://") and not b_url.startswith("https://"):
+            creds["base_url"] = f"https://{{b_url.lstrip('/')}}"
+    else:
+        if any(w in srv_lower for w in ["servicenow", "service_now", "snow"]):
+            creds["base_url"] = "https://dev302564.service-now.com"
     creds["base_url"] = creds["base_url"].rstrip("/")
     return creds
 
@@ -681,7 +691,13 @@ def {fn_name}(path_or_params: Optional[Dict[str, Any]] = None, **kwargs) -> str:
     if target_endpoint.startswith("http://") or target_endpoint.startswith("https://"):
         url = target_endpoint
     else:
-        url = f"{{base}}/{{target_endpoint.lstrip('/')}}"
+        base_clean = (base or "").strip().rstrip("/")
+        if not base_clean.startswith("http://") and not base_clean.startswith("https://"):
+            if is_snow:
+                base_clean = f"https://{{base_clean.lstrip('/')}}" if base_clean else "https://dev302564.service-now.com"
+            else:
+                base_clean = f"https://{{base_clean.lstrip('/')}}" if base_clean else "https://api.service.com"
+        url = f"{{base_clean}}/{{target_endpoint.lstrip('/')}}"
 
     # Clean out empty/None arguments and path parameters so they do not pollute query string
     clean_args = {{k: v for k, v in args.items() if v is not None and str(v).strip() != ""}}
@@ -938,6 +954,13 @@ def ensure_server_script(platform_id: str, config_values: dict = None, tools: li
     base_url = (config_values or {}).get("base_url", (config_values or {}).get("instance_url", "https://api.service.com"))
     auth_header = (config_values or {}).get("auth_header", (config_values or {}).get("password", (config_values or {}).get("api_token", "")))
     tools_list = tools or (spec.get("tools", []) if spec else [])
+    if not tools_list:
+        try:
+            reg = load_server_registry()
+            s_data = reg.get("servers", {}).get(platform_id, {})
+            tools_list = s_data.get("all_tools") or s_data.get("tools", [])
+        except Exception:
+            pass
 
     # Always generate fresh server script with all active tools
     code = generate_dynamic_mcp_server_script(platform_id, name, base_url, auth_header, tools_list)
