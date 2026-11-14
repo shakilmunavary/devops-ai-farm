@@ -3413,7 +3413,13 @@
         async function fetchGatewayKey() {
             try {
                 const res = await fetch('/api/gateway/key');
-                const data = await res.json();
+                const rawText = await res.text();
+                let data = {};
+                try {
+                    data = JSON.parse(rawText);
+                } catch (_) {
+                    throw new Error(`HTTP ${res.status} (${res.statusText || 'Error'}): ${rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180)}`);
+                }
                 if (data.api_key) {
                     gatewayApiKey = data.api_key;
                 }
@@ -4522,7 +4528,13 @@
                     })
                 });
 
-                const data = await res.json();
+                const rawText = await res.text();
+                let data = {};
+                try {
+                    data = JSON.parse(rawText);
+                } catch (_) {
+                    throw new Error(`HTTP ${res.status} (${res.statusText || 'Error'}): ${rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180)}`);
+                }
 
                 if (res.ok && data.success) {
                     appendBotMessage(`

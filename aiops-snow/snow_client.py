@@ -18,7 +18,7 @@ except ImportError:
 
 log = logging.getLogger("aiops-snow")
 
-DEFAULT_SNOW_INSTANCE = "dev392242.service-now.com"
+DEFAULT_SNOW_INSTANCE = "dev302564.service-now.com"
 DEFAULT_SNOW_USER = "mcp_admin"
 DEFAULT_SNOW_PASSWORD = "Magic@100"
 
@@ -192,6 +192,23 @@ def search_users(term="", limit=200):
     return users
 
 
+_SCRIPTED_NAMESPACE = None
+
+
+def get_scripted_namespace() -> str:
+    global _SCRIPTED_NAMESPACE
+    if _SCRIPTED_NAMESPACE:
+        return _SCRIPTED_NAMESPACE
+    try:
+        rows = snow_get("sys_ws_definition", "service_id=devops_user_helper^ORservice_id=aws_sop_api", ["namespace", "service_id"], 1)
+        if rows and rows[0].get("namespace"):
+            _SCRIPTED_NAMESPACE = rows[0]["namespace"]
+            return _SCRIPTED_NAMESPACE
+    except Exception:
+        pass
+    return "1321336"
+
+
 def create_approval_record(approver_sys_id: str, ritm_sys_id: str):
     """
     Creates an approval record in sysapproval_approver linked to the RITM.
@@ -200,7 +217,8 @@ def create_approval_record(approver_sys_id: str, ritm_sys_id: str):
     """
     # 1. Try Scripted REST API endpoint
     try:
-        scripted_url = f"{snow_base().replace('/api/now', '')}/api/1986245/devops_user_helper/create_approval"
+        ns = get_scripted_namespace()
+        scripted_url = f"{snow_base().replace('/api/now', '')}/api/{ns}/devops_user_helper/create_approval"
         resp = requests.post(
             scripted_url,
             auth=snow_auth(),
