@@ -1341,6 +1341,9 @@ def evaluate_server_health_from_creds(platform_id: str, creds_dict: dict, tools:
     if any(x in p_id_lower for x in ["azure_devops", "azure-devops", "devops", "ado"]):
         endpoint = "/_apis/projects?api-version=7.1"
         probe_name = "list_projects"
+    elif any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]):
+        endpoint = "/api/now/table/incident?sysparm_limit=1"
+        probe_name = "list_incidents"
     else:
         for t in (tools or []):
             t_name = t.get("name", "")
@@ -1371,6 +1374,12 @@ def evaluate_server_health_from_creds(platform_id: str, creds_dict: dict, tools:
         endpoint = endpoint.replace("{project}", project).replace("{project_name}", project).replace("{project_id}", project)
     if username:
         endpoint = endpoint.replace("{username}", username).replace("{user}", username)
+
+    # If endpoint STILL has unresolved path parameter (e.g. /{sys_id}), strip it to test base collection
+    if "{" in endpoint:
+        endpoint = re.sub(r'/\{[^}]+\}.*$', '', endpoint)
+        if any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]) and "?" not in endpoint:
+            endpoint = f"{endpoint}?sysparm_limit=1"
 
     # Handle UNIX domain sockets (e.g. Docker unix:///var/run/docker.sock)
     if base_url.startswith("unix://") or "docker" in p_id_lower:
@@ -1475,6 +1484,20 @@ def evaluate_server_health_from_creds(platform_id: str, creds_dict: dict, tools:
                     "preview": text_preview
                 }
             elif status == 404:
+                # ServiceNow fallback: If a specific record path returned 404 "No Record found", test base table
+                if any(x in p_id_lower for x in ["servicenow", "service_now", "snow"]):
+                    try:
+                        alt_snow_url = f"{base_url.rstrip('/')}/api/now/table/incident?sysparm_limit=1"
+                        alt_res = client.get(alt_snow_url)
+                        if alt_res.status_code in [200, 201, 202, 204]:
+                            return {
+                                "passed": True,
+                                "probe": "list_incidents",
+                                "preview": f"HTTP {alt_res.status_code} OK: Successfully authenticated with ServiceNow instance."
+                            }
+                    except Exception:
+                        pass
+
                 # Smart generic fallback: If /orgs/<name> returned 404 because <name> is a User account, try /users/ or /user/repos
                 if "/orgs/" in probe_url:
                     for alt_url in [probe_url.replace("/orgs/", "/users/"), f"{base_url.rstrip('/')}/user/repos"]:
